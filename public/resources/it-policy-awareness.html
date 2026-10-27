@@ -85,23 +85,26 @@
   .err{color:var(--flag);font-size:13px;margin-top:8px;}
 
   /* Toast notifications */
-  .toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
+  .toast-container{position:fixed;top:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;}
   .toast{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:8px;box-shadow:0 4px 12px rgba(16,24,40,.15);min-width:280px;max-width:420px;animation:slideIn .3s ease;}
   @keyframes slideIn{from{opacity:0;transform:translateX(100%);}to{opacity:1;transform:translateX(0);}}
-  .toast.success{background:var(--good-bg);border-left:4px solid var(--good);color:var(--good);}
-  .toast.error{background:var(--flag-bg);border-left:4px solid var(--flag);color:var(--flag);}
+  .toast.success{background:#14532d;border-left:4px solid #0b3d20;color:#fff;}
+  .toast.error{background:#7f1d1d;border-left:4px solid #5b1111;color:#fff;}
   .toast.info{background:var(--navy);border-left:4px solid var(--navy-light);color:#fff;}
   .toast .icon{flex:none;font-size:18px;}
   .toast .msg{flex:1;font-size:14px;line-height:1.4;}
   .toast .close{flex:none;background:none;border:none;color:inherit;font-size:18px;cursor:pointer;opacity:.6;padding:0 4px;}
   .toast .close:hover{opacity:1;}
 
-  /* Confirmation checkbox */
-  .confirm-box{margin-top:16px;padding:14px 16px;background:var(--bg);border-radius:8px;border:1px solid var(--line);}
-  .confirm-box label{display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0;font-size:13.5px;color:var(--ink);}
-  .confirm-box input[type=checkbox]{flex:none;margin-top:2px;width:18px;height:18px;accent-color:var(--navy);}
-  .confirm-box .confirm-text{line-height:1.5;}
-  .confirm-box .confirm-text strong{color:var(--navy);}
+  /* Employee details confirmation modal */
+  .details-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.55);}
+  .details-modal[hidden]{display:none;}
+  .details-modal-card{width:100%;max-width:460px;background:#fff;border-radius:12px;padding:28px;box-shadow:0 18px 50px rgba(15,23,42,.25);}
+  .details-modal-card h2{margin:0 0 10px;color:var(--navy);font-size:21px;}
+  .details-modal-card p{margin:0 0 22px;color:var(--muted);font-size:14px;}
+  .details-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+  .details-modal-actions .btn.contact{background:#7f1d1d;}
+  .details-modal-actions .btn.contact:hover{background:#5b1111;}
 
   /* Chapter review screen */
   .chap-list{margin-top:18px;}
@@ -223,8 +226,9 @@ const TRAINING_CODE = "EHS/MIC-SECURITY-2026";
 
 const API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api/it_policy_awareness";
 // Base for the portal's own endpoints (e.g. /user/info), which do NOT live
-// under /it_policy_awareness. Training endpoints are flat files: ${API_BASE}/<name>.php
+// under /it_policy_awareness. Training endpoints are the named PHP routes below.
 const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api";
+const IT_POLICY_AWARENESS_SECRET = "IT_POLICY_AWARENESS_SECRET";
 
 // The confirmed live PHP middleware (api/training/*.php) guards
 // this module with a static shared secret rather than the portal's normal
@@ -235,7 +239,6 @@ const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api"
 // meet the doc's Section 15 bar (a secret embedded in JS is inherently
 // readable by anyone, as this very repo's own recovery history shows) and
 // should be revisited once the middleware supports real session auth.
-const IT_POLICY_AWARENESS_SECRET = "EHS_POLICY_AWARENESS_SECRET_2026";
 function policyAwarenessHeaders(extra){
   return Object.assign({ "X-Internal-Token": IT_POLICY_AWARENESS_SECRET }, extra || {});
 }
@@ -251,11 +254,11 @@ function portalAuthHeaders(extra){
    DATA ADAPTER -- THE ONLY SECTION THAT NEEDS TO CHANGE FOR BACKEND INTEGRATION
    ----------------------------------------------------------------------------
    The frontend uses the four available PHP operations:
-   fetch-questions.php, submit-answers.php, final-submit.php, and the
+   fetch_it_questions, submit-it_answers, final_it_submit, and the
    ITPolicyAwareness model behind them.
    ============================================================================ */
 const DataAdapter = {
-  // POST /api/it_policy_awareness/submit-answers.php
+  // POST /api/it_policy_awareness/submit-it_answers
   // Submitted the instant an option is picked, so NAV is updated answer by
   // answer as they come in (like a tallying centre), not in one batch at the
   // end. Body matches NAV's getITtrainingAnswers(empNumber, attemptNo,
@@ -270,7 +273,7 @@ const DataAdapter = {
     const MAX_TRIES = 3;
     for(let attempt = 1; attempt <= MAX_TRIES; attempt++){
       try{
-        const res = await fetch(`${API_BASE}/submit-answers.php`, {
+        const res = await fetch(`${API_BASE}/submit-it_answers`, {
           method: "POST",
           headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ empNumber, attemptNo, entity, questionNumber, selectedOption })
@@ -287,13 +290,13 @@ const DataAdapter = {
     return { ok: false, isCorrect: undefined };
   },
 
-  // POST /api/it_policy_awareness/final-submit.php
+  // POST /api/it_policy_awareness/final_it_submit
   // Called once after the last question. Maps to NAV's
   // submitQuestions(empNumber, attemptNo), which finalises the attempt from
   // the answers NAV already received one by one -- correctness is never
   // computed client-side.
   async completeAttempt({ empNumber, attemptNo, entity }){
-    const res = await fetch(`${API_BASE}/final-submit.php`, {
+    const res = await fetch(`${API_BASE}/final_it_submit`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ empNumber, attemptNo, entity })
@@ -304,7 +307,7 @@ const DataAdapter = {
   },
 
   // No completion endpoint is available in this backend. Completion is
-  // acknowledged by final-submit.php.
+  // acknowledged by final_it_submit.
   async listRecords(){
     throw new Error("The completion log is not available in this backend.");
   }
@@ -335,6 +338,42 @@ function showToast(message, type = "info", duration = 4000){
   container.appendChild(toast);
   if(duration > 0) setTimeout(() => toast.remove(), duration);
   return toast;
+}
+
+function showDetailsConfirmation(onConfirm){
+  let modal = document.getElementById("details-confirmation-modal");
+  if(!modal){
+    modal = document.createElement("div");
+    modal.id = "details-confirmation-modal";
+    modal.className = "details-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "details-confirmation-title");
+    modal.innerHTML = `
+      <div class="details-modal-card">
+        <h2 id="details-confirmation-title">Kindly confirm if these are your details</h2>
+        <p>Please confirm that the employee details shown belong to you before proceeding to the IT Security Policy.</p>
+        <div class="details-modal-actions">
+          <button type="button" class="btn contact" id="contact-it-admin-btn">No, Contact IT Admin</button>
+          <button type="button" class="btn" id="proceed-policy-btn">Yes, Proceed to IT Security Policy</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", event => {
+      if(event.target === modal) modal.hidden = true;
+    });
+  }
+  modal.hidden = false;
+  document.getElementById("proceed-policy-btn").onclick = () => {
+    modal.hidden = true;
+    onConfirm();
+  };
+  document.getElementById("contact-it-admin-btn").onclick = () => {
+    modal.hidden = true;
+    showToast("Returning to Resources so you can contact IT Admin.", "info");
+    window.location.assign("/resources-and-forms");
+  };
 }
 
 // Entity mapping from Branch/Department to official entity names
@@ -374,14 +413,15 @@ function decodeEscapes(v){
 }
 
 async function fetchITQuestions(employeeId, entity){
-  const qs = new URLSearchParams({ employeeId });
-  if(entity) qs.set("entity", entity);
-  const res = await fetch(`${API_BASE}/fetch-questions.php?${qs}`, {
-    method: "GET",
-    headers: policyAwarenessHeaders()
+  const res = await fetch(`${API_BASE}/fetch_it_questions`, {
+    method: "POST",
+    headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ employeeId, entity })
   });
   const json = await res.json();
-  if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not load the knowledge check questions");
+  if(!res.ok || (json.status !== "success" && json.error !== false)) {
+    throw new Error(json.message || "Could not load the knowledge check questions");
+  }
 
   // The NAV operation returns { error, message, data: [...] }. The first
   // data item contains the employee header and the remaining items are
@@ -404,10 +444,10 @@ async function fetchITQuestions(employeeId, entity){
     questions,
     attemptNo: Number(json.attemptNo) || Number((rawQuestions[0] || {}).attemptNo) || null,
     employee: {
-      name: String(e.fullName || e.name || "").trim(),
-      employeeId: String(e.employeeId || e.employeeNo || employeeId || "").trim(),
-      entity: normalizeEntity(e.company),
-      department: String(e.dept || e.department || "").trim()
+      name: String(e.fullName || e.full_name || e.name || "").trim(),
+      employeeId: String(e.employeeId || e.employeeNo || e.EmployeeNumber || employeeId || "").trim(),
+      entity: normalizeEntity(e.company || e.entity),
+      department: String(e.dept || e.department || e.Department || e.departmentName || e["Department Name"] || "").trim()
     }
   };
 }
@@ -429,7 +469,7 @@ async function fetchEmployeeDetails(username){
   const d = json.data;
   const fullName = buildFullName(d);
   const employeeId = d.EmployeeNumber;
-  const department = d.Dept || d.Department || "";
+  const department = d.Dept || d.Department || d["Department Name"] || d.department || "";
   const branch = d.Branch || "";
   const entity = mapEntityFromBranch(branch, department) || (d.CompanyEmail?.includes("ehs") ? ENTITIES[1] : ENTITIES[0]);
   return {
@@ -578,12 +618,7 @@ function renderIntro(){
       <input type="text" id="f-entity" value="${escapeHtml(state.entity)}" readonly/>
       <label for="f-dept">Department</label>
       <input type="text" id="f-dept" value="${escapeHtml(state.department || "—")}" readonly/>
-      <div class="confirm-box" id="confirm-box">
-        <label>
-          <input type="checkbox" id="confirm-details" />
-          <span class="confirm-text">I confirm that the above details are correct and belong to me.</span>
-        </label>
-      </div>` : `
+      ` : `
       <label for="f-name">Full name</label>
       <input type="text" id="f-name" placeholder="e.g. Jane Wanjiru" value="${escapeHtml(state.name)}"/>
       <label for="f-id">Employee ID</label>
@@ -596,19 +631,10 @@ function renderIntro(){
     <div id="intro-err" class="err" style="display:none;"></div>
     <div class="row-btns">
       <span></span>
-      <button class="btn" id="start-btn" ${prefilled ? "disabled" : ""}>Begin</button>
+      <button class="btn" id="start-btn">Begin</button>
     </div>
     ${COMPLETION_LOG_AVAILABLE ? `<button class="footer-link" id="log-link">View completion log</button>` : ""}
   `;
-  
-  // Handle confirmation checkbox for prefilled data
-  if(prefilled){
-    const confirmCheckbox = document.getElementById("confirm-details");
-    const startBtn = document.getElementById("start-btn");
-    confirmCheckbox.addEventListener("change", () => {
-      startBtn.disabled = !confirmCheckbox.checked;
-    });
-  }
   
   document.getElementById("start-btn").onclick = async () => {
     if(!prefilled){
@@ -633,43 +659,36 @@ function renderIntro(){
       }
       err.style.display = "none";
       state.name = name; state.employeeId = id; state.entity = entity; state.department = dept;
-      showToast("Details confirmed. Loading policy questions…", "success");
-    } else {
-      // For prefilled, checkbox validation is handled by the disabled button
-      // but double-check here as a safety net
-      const confirmed = document.getElementById("confirm-details")?.checked;
-      if(!confirmed){
-        showToast("Please confirm your details before proceeding.", "error");
-        return;
-      }
-      showToast("Details confirmed. Loading policy questions…", "success");
     }
-    if(state.questions.length === 0){
-      const startBtn = document.getElementById("start-btn");
-      startBtn.disabled = true;
-      startBtn.textContent = "Loading questions…";
-      try{
-        const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
-        state.questions = questions;
-        state.attemptNo = attemptNo;
-        if(employee){
-          state.name = employee.name || state.name;
-          state.entity = employee.entity || state.entity;
-          state.department = employee.department || state.department;
-          state.employeeId = employee.employeeId || state.employeeId;
+    showDetailsConfirmation(async () => {
+      showToast("Details confirmed. Loading policy questions…", "success");
+      if(state.questions.length === 0){
+        const startBtn = document.getElementById("start-btn");
+        startBtn.disabled = true;
+        startBtn.textContent = "Loading questions…";
+        try{
+          const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
+          state.questions = questions;
+          state.attemptNo = attemptNo;
+          if(employee){
+            state.name = employee.name || state.name;
+            state.entity = employee.entity || state.entity;
+            state.department = employee.department || state.department;
+            state.employeeId = employee.employeeId || state.employeeId;
+          }
+        }catch(e){
+          startBtn.disabled = false;
+          startBtn.textContent = "Begin";
+          const err = document.getElementById("intro-err");
+          err.textContent = friendlyError(e, "Could not load the knowledge check questions. Please try again.");
+          err.style.display = "block";
+          showToast("Failed to load questions. Please try again.", "error");
+          return;
         }
-      }catch(e){
-        startBtn.disabled = false;
-        startBtn.textContent = "Begin";
-        const err = document.getElementById("intro-err");
-        err.textContent = friendlyError(e, "Could not load the knowledge check questions. Please try again.");
-        err.style.display = "block";
-        showToast("Failed to load questions. Please try again.", "error");
-        return;
       }
-    }
-    state.screen = "chapters";
-    render();
+      state.screen = "chapters";
+      render();
+    });
   };
   const logLink = document.getElementById("log-link");
   if(logLink) logLink.onclick = () => { state.screen = "log"; render(); };
