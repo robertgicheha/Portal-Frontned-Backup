@@ -250,33 +250,11 @@ function portalAuthHeaders(extra){
 /* ============================================================================
    DATA ADAPTER -- THE ONLY SECTION THAT NEEDS TO CHANGE FOR BACKEND INTEGRATION
    ----------------------------------------------------------------------------
-   Every place this tool reads or writes a completion record calls ONLY the
-   methods below. Nothing else in this file touches the network directly.
-
-   Endpoints and payload shapes here match the live api/training/
-   *.php middleware (PolicyAwareness model), which implements the EHS/MIC
-   Training Questionnaire integration requirements doc's NAV operations
-   (GetTrainingQuestions / StartTrainingAttempt / SubmitTrainingAnswer /
-   CompleteTrainingAttempt / GetTrainingCompletion) under flat, non-RESTful
-   routes -- entity is required on every call so the middleware can route to
-   the right NAV company (MIC vs EHS), and every input travels in the JSON
-   request body rather than the URL (integration spec section 15).
+   The frontend uses the four available PHP operations:
+   fetch-questions.php, submit-answers.php, final-submit.php, and the
+   ITPolicyAwareness model behind them.
    ============================================================================ */
 const DataAdapter = {
-  // POST /api/training/attempts
-  // Starts a new attempt for this employee + entity + training code and
-  // returns the authoritative attemptNo used by every subsequent call.
-  async startAttempt({ employeeId, entity, trainingCode = TRAINING_CODE }){
-    const res = await fetch(`${API_BASE}/start-attempt.php`, {
-      method: "POST",
-      headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ employeeId, entity, trainingCode })
-    });
-    const json = await res.json();
-    if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not start the knowledge check");
-    return json; // { status, attemptNo, employeeNo, dateStarted }
-  },
-
   // POST /api/it_policy_awareness/submit-answers.php
   // Submitted the instant an option is picked, so NAV is updated answer by
   // answer as they come in (like a tallying centre), not in one batch at the
@@ -325,29 +303,10 @@ const DataAdapter = {
     return json; // { status, attemptNo, totalQuestions, correctAnswers, score, passed, completed, completedDate }
   },
 
-  // POST /api/training/completion
-  // The current employee's own completion status. employeeId + entity travel
-  // in the JSON body (no session-derived identity yet), so nothing is
-  // exposed in the URL.
-  async getCompletion({ employeeId, entity, trainingCode = TRAINING_CODE }){
-    const params = new URLSearchParams({ employeeId, entity, trainingCode });
-    const res = await fetch(`${API_BASE}/completion.php?${params.toString()}`, {
-      method: "GET",
-      headers: policyAwarenessHeaders()
-    });
-    const json = await res.json();
-    if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not load your completion status");
-    return json;
-  },
-
-  // Org-wide "everyone's completion" reporting is explicitly called out in
-  // the live completion.php as NOT part of this integration -- it needs its
-  // own NAV operation that doesn't exist yet (spec §22 "Reporting and
-  // dashboards" future work). There is no endpoint to call here today, so
-  // this intentionally always rejects; the UI hides its entry points below
-  // (COMPLETION_LOG_AVAILABLE) rather than offering a feature that can't work.
+  // No completion endpoint is available in this backend. Completion is
+  // acknowledged by final-submit.php.
   async listRecords(){
-    throw new Error("The completion log isn't available yet -- it needs a dedicated NAV reporting operation that hasn't been built.");
+    throw new Error("The completion log is not available in this backend.");
   }
 };
 /* ======================== END DATA ADAPTER SECTION ======================== */
@@ -415,15 +374,24 @@ function decodeEscapes(v){
 }
 
 async function fetchITQuestions(employeeId, entity){
-  const qs = new URLSearchParams({ employeeId, entity });
-  const res = await fetch(`${API_BASE}/questions.php?${qs}`, {
+  const qs = new URLSearchParams({ employeeId });
+  if(entity) qs.set("entity", entity);
+  const res = await fetch(`${API_BASE}/fetch-questions.php?${qs}`, {
     method: "GET",
     headers: policyAwarenessHeaders()
   });
   const json = await res.json();
   if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not load the knowledge check questions");
 
-  const questions = (json.questions || []).map(q => ({
+  // The NAV operation returns { error, message, data: [...] }. The first
+  // data item contains the employee header and the remaining items are
+  // questions. Also accept the PHP wrapper shape when it is returned.
+  const navData = Array.isArray(json.data) ? json.data : [];
+  const navEmployee = navData.find(item => item && item.fullName) || {};
+  const rawQuestions = Array.isArray(json.questions)
+    ? json.questions
+    : navData.filter(item => item && item.questionNo);
+  const questions = rawQuestions.map(q => ({
     questionNo: q.questionNo,
     chapter: decodeEscapes(q.chapter),
     q: decodeEscapes(q.question),
@@ -431,13 +399,11 @@ async function fetchITQuestions(employeeId, entity){
     optionNos: (q.options || []).map(o => o.optionNo),
     note: decodeEscapes(q.note)
   }));
-  const e = json.employee || {};
+  const e = Object.assign({}, navEmployee, json.employee || {});
   return {
     questions,
-    attemptNo: Number(json.attemptNo) || Number((json.questions || [])[0] && json.questions[0].attemptNo) || null,
+    attemptNo: Number(json.attemptNo) || Number((rawQuestions[0] || {}).attemptNo) || null,
     employee: {
-      // NAV sends { fullName, company, dept }; older shape was { name, department }.
-      // Values can carry trailing spaces (e.g. "Information Technology "), so trim.
       name: String(e.fullName || e.name || "").trim(),
       employeeId: String(e.employeeId || e.employeeNo || employeeId || "").trim(),
       entity: normalizeEntity(e.company),
@@ -537,6 +503,7 @@ function render(){
   if(state.screen === "chapters") return renderChapters();
   if(state.screen === "quiz") return renderQuiz();
   if(state.screen === "result") return renderResult();
+  if(state.screen === "thanks") return renderThankYou();
   if(state.screen === "log") return renderLog();
 }
 
@@ -548,10 +515,9 @@ function renderLoading(){
   `;
 }
 
-// Resolves who's signed in (via ?username=, passed in by the portal's
-// Resources link) and fetches this attempt's questions up front. Falls
-// back to the manual-entry intro form -- with questions fetched once the
-// employee ID is typed in -- if identity can't be resolved automatically.
+// Resolves the signed-in employee from the portal's EmployeeNumber and
+// fetches this attempt's questions up front. A legacy username fallback is
+// retained for direct links created by older portal builds.
 async function boot(){
   const params = getUrlParams();
   state.name = params.name;
@@ -569,10 +535,9 @@ async function boot(){
       showToast(`Welcome, ${details.name}! Your details have been loaded.`, "success");
     }
 
-    // entity is required on every api/training/*.php call. If we have
-    // employeeId but no entity (e.g. URL param missing), we'll show the
-    // manual-entry form with the prefilled data so user can confirm/select entity.
-    if(state.employeeId && state.entity){
+    // GetTrainingQuestions is keyed by EmployeeNumber and returns the
+    // authoritative employee details, including entity and department.
+    if(state.employeeId){
       const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
       state.questions = questions;
       state.attemptNo = attemptNo;
@@ -582,12 +547,6 @@ async function boot(){
         state.entity = employee.entity || state.entity;
         state.department = employee.department || state.department;
       }
-      // POST /api/training/completion -- best-effort only, so
-      // a returning employee sees their existing status instead of being
-      // forced to retake blind. Never blocks getting to the intro screen.
-      try{
-        state.priorCompletion = await DataAdapter.getCompletion({ employeeId: state.employeeId, entity: state.entity, trainingCode: TRAINING_CODE });
-      }catch(e){ state.priorCompletion = null; }
     }
   }catch(e){
     console.error("[it-policy] auto-load failed:", e);
@@ -605,16 +564,11 @@ async function boot(){
 function renderIntro(){
   const prefilled = !!(state.name && state.employeeId && state.entity);
   const entityOptions = ENTITIES.map(e => `<option value="${escapeHtml(e)}" ${state.entity===e?"selected":""}>${escapeHtml(e)}</option>`).join("");
-  const pc = state.priorCompletion;
   app.innerHTML = `
     <span class="chapter-tag">Policy Awareness Portal</span>
     <h1>IT Security Policy — Staff Awareness</h1>
     <p class="sub">Two steps: review the six policy chapters that directly affect your day-to-day work, then complete a short knowledge check. Takes about 8 minutes in total.</p>
     <div class="scope"><strong>Covers:</strong> Acceptable Use &middot; AI Governance &middot; Social Media &middot; Data Loss Prevention &middot; Physical Security &middot; Email</div>
-    ${pc && pc.completed && pc.passed ? `
-      <div class="feedback good" style="margin-top:18px;">
-        You've already completed this training — scored <b>${Math.round(pc.score)}%</b> on ${new Date(pc.completedDate).toLocaleDateString()}. You can retake it below if you'd like, but it isn't required.
-      </div>` : ""}
     ${prefilled ? `
       <label for="f-name">Full name</label>
       <input type="text" id="f-name" value="${escapeHtml(state.name)}" readonly/>
@@ -702,6 +656,7 @@ function renderIntro(){
           state.name = employee.name || state.name;
           state.entity = employee.entity || state.entity;
           state.department = employee.department || state.department;
+          state.employeeId = employee.employeeId || state.employeeId;
         }
       }catch(e){
         startBtn.disabled = false;
@@ -914,7 +869,7 @@ async function finishQuiz(){
     state.lastRecord = null;
   }
 
-  state.screen = "result";
+  state.screen = "thanks";
   render();
 }
 
@@ -940,8 +895,8 @@ function renderResult(){
     return;
   }
 
-  // NAV's submitQuestions may only acknowledge the submission without sending
-  // back a score. Show a neutral confirmation rather than a fake 0% result.
+  // NAV's submitQuestions response may include a score, but completion is
+  // acknowledged by the dedicated thank-you screen below.
   if(!r.total){
     app.innerHTML = `
       <div class="cert">
@@ -992,6 +947,31 @@ function renderResult(){
   };
   const logBtn = document.getElementById("log-btn");
   if(logBtn) logBtn.onclick = () => { state.screen = "log"; render(); };
+}
+
+function renderThankYou(){
+  const r = state.lastRecord || {};
+  app.innerHTML = `
+    <div class="cert">
+      <div class="stamp">&#10003;</div>
+      <h1>Thank you${r.name ? `, ${escapeHtml(r.name.split(" ")[0])}` : ""}!</h1>
+      <p class="sub">Your IT Policy Awareness quiz has been completed and submitted to NAV.</p>
+      <div class="meta-box">
+        <div><b>Employee ID:</b> ${escapeHtml(r.employeeId || state.employeeId)}</div>
+        <div><b>Entity:</b> ${escapeHtml(r.entity || state.entity || "—")}</div>
+        <div><b>Department:</b> ${escapeHtml(r.department || state.department || "—")}</div>
+        <div><b>Submitted:</b> ${new Date(r.completedDate || Date.now()).toLocaleString()}</div>
+      </div>
+      <div class="row-btns" style="justify-content:center;gap:12px;flex-wrap:wrap;">
+        <button class="btn" id="retake-quiz-btn">Retake quiz</button>
+        <a class="btn secondary" href="/">Return to dashboard</a>
+        <a class="btn secondary" href="/resources-and-forms">Back to Resources</a>
+      </div>
+    </div>
+  `;
+  document.getElementById("retake-quiz-btn").onclick = async (event) => {
+    await startAttemptAndGoToQuiz(event.target, null);
+  };
 }
 
 async function renderLog(){

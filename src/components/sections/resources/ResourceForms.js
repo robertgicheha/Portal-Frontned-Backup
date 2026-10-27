@@ -1,11 +1,26 @@
-import React from "react";
+import React, { useContext } from "react";
 import { Link } from "react-router-dom";
 import { FileText } from "react-feather";
+import { GlobalContext } from "../../../context/GlobalState";
 
 const ResourceForms = () => {
-  // Static page served by the web server (see public/web.config). The page reads
-  // the signed-in user from the portal token itself, so no username is passed.
-  const itPolicyAwarenessLink = "/resources/it-policy-awareness";
+  const { user_info } = useContext(GlobalContext);
+  const employeeNumber = String(user_info.EmployeeNumber || "").trim();
+  const companyEmail = String(user_info.CompanyEmail || "").toLowerCase();
+  const branch = String(user_info.Branch || "").toLowerCase();
+  const department = String(user_info.Dept || user_info.Department || "").toLowerCase();
+  const entity =
+    companyEmail.includes("ehs") ||
+    branch.includes("healthcare") ||
+    branch.includes("executive") ||
+    department.includes("ehs")
+      ? "Executive Healthcare Solutions Limited"
+      : "MIC Global Risks (Insurance Brokers) Limited";
+  const itPolicyAwarenessLink = employeeNumber
+    ? `/resources/it-policy-awareness?id=${encodeURIComponent(
+        employeeNumber
+      )}&entity=${encodeURIComponent(entity)}`
+    : "/resources/it-policy-awareness";
 
   const quicks = [
     {
