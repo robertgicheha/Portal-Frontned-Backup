@@ -123,7 +123,16 @@ const Payslip = () => {
     data["date_filter"] = data["year"] + "-" + data["month"] + "-01";
 
     // loadingStatus(true);
-    getPaySlip(data.date_filter, leave_info.empNo, company);
+    const employeeNumber = String(
+      user_info.EmployeeNumber ||
+      user_info.employeeNumber ||
+      leave_info.empNo ||
+      leave_info.EmployeeNumber ||
+      leave_info.employeeNumber ||
+      ""
+    ).trim();
+
+    getPaySlip(data.date_filter, employeeNumber, company);
 
     reset();
   };
@@ -139,8 +148,14 @@ const Payslip = () => {
     userDetailsToUpdate();
 
     return () => {
-      if (payslips.length > 0) {
-        deleteSlip(leave_info.empNo);
+      if (Number(payslips) > 0) {
+        deleteSlip(
+          user_info.EmployeeNumber ||
+            user_info.employeeNumber ||
+            leave_info.empNo ||
+            leave_info.EmployeeNumber ||
+            leave_info.employeeNumber
+        );
       }
     };
 
@@ -149,7 +164,13 @@ const Payslip = () => {
 
   useEffect(() => {
     if (downloadSlip) {
-      removeSlip(leave_info.empNo);
+      removeSlip(
+        user_info.EmployeeNumber ||
+          user_info.employeeNumber ||
+          leave_info.empNo ||
+          leave_info.EmployeeNumber ||
+          leave_info.employeeNumber
+      );
     }
 
     // eslint-disable-next-line
@@ -283,7 +304,7 @@ const Payslip = () => {
                       <>
                         <div className="col-md-12">
                           <div className="document_list">
-                            {payslips.length > 0 ? (
+                            {Number(payslips) > 0 ? (
                               <>
                                 <div className="row">
                                   <div className="col-md-8 col-12">
@@ -296,14 +317,32 @@ const Payslip = () => {
                                 <div className="row">
                                   <div className="col-md-8 col-12">
                                     <Link
-                                      to={`/documents/${leave_info.empNo}/payslip/${leave_info.empNo}_${selectedMonth}_${selectedYear}.pdf`}
+                                      to={`/documents/${
+                                        user_info.EmployeeNumber ||
+                                        user_info.employeeNumber ||
+                                        leave_info.empNo ||
+                                        leave_info.EmployeeNumber ||
+                                        leave_info.employeeNumber
+                                      }/payslip/${
+                                        user_info.EmployeeNumber ||
+                                        user_info.employeeNumber ||
+                                        leave_info.empNo ||
+                                        leave_info.EmployeeNumber ||
+                                        leave_info.employeeNumber
+                                      }_${selectedMonth}_${selectedYear}.pdf`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       download
                                     >
                                       <FileText size={19} />
                                       &nbsp;Click to download -{" "}
-                                      {`${leave_info.empNo}_${selectedMonth}_${selectedYear}.pdf`}
+                                      {`${
+                                        user_info.EmployeeNumber ||
+                                        user_info.employeeNumber ||
+                                        leave_info.empNo ||
+                                        leave_info.EmployeeNumber ||
+                                        leave_info.employeeNumber
+                                      }_${selectedMonth}_${selectedYear}.pdf`}
                                       <br />
                                       <br />
                                     </Link>
@@ -322,7 +361,15 @@ const Payslip = () => {
                                 <Link
                                   className="back-payslip"
                                   to="/profile/payslip"
-                                  onClick={() => deleteSlip(leave_info.empNo)}
+                                  onClick={() =>
+                                    deleteSlip(
+                                      user_info.EmployeeNumber ||
+                                        user_info.employeeNumber ||
+                                        leave_info.empNo ||
+                                        leave_info.EmployeeNumber ||
+                                        leave_info.employeeNumber
+                                    )
+                                  }
                                 >
                                   <ChevronsLeft size={16} />
                                   &nbsp;Go Back to payslip

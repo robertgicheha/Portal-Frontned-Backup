@@ -751,6 +751,14 @@ export const GlobalProvider = ({ children }) => {
     loadingStatus(true);
 
     const info = tokenInfo();
+    const employeeNumber =
+      emp ||
+      state.user_info.EmployeeNumber ||
+      state.user_info.employeeNumber ||
+      state.leave_info.empNo ||
+      state.leave_info.EmployeeNumber ||
+      state.leave_info.employeeNumber ||
+      "";
 
     try {
       const config = {
@@ -760,7 +768,13 @@ export const GlobalProvider = ({ children }) => {
         },
       };
       const res = await axios.get(
-        `${baseURL}/user/slip?username=${info.data.username}&date_filter=${date}&emp_no=${emp}&company=${company}`,
+        `${baseURL}/user/slip?username=${encodeURIComponent(
+          info.data.username
+        )}&date_filter=${encodeURIComponent(
+          date
+        )}&emp_no=${encodeURIComponent(employeeNumber)}&company=${encodeURIComponent(
+          company
+        )}`,
         config
       );
 
@@ -769,7 +783,7 @@ export const GlobalProvider = ({ children }) => {
       if (res.data) {
         dispatch({
           type: "LOAD_PAYSLIP_LIST",
-          payload: Array.isArray(res.data.file_list) ? res.data.file_list : [],
+          payload: Number(res.data.file_list) || 0,
         });
 
         unsetSlip(true);
