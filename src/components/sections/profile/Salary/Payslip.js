@@ -283,7 +283,7 @@ const Payslip = () => {
                       <>
                         <div className="col-md-12">
                           <div className="document_list">
-                            {payslips > 0 ? (
+                            {payslips.length > 0 ? (
                               <>
                                 <div className="row">
                                   <div className="col-md-8 col-12">

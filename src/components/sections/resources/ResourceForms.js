@@ -1,16 +1,11 @@
-import React, { useContext } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { FileText } from "react-feather";
-import { GlobalContext } from "../../../context/GlobalState";
 
 const ResourceForms = () => {
-  const { user_info } = useContext(GlobalContext);
-
-  const itPolicyAwarenessLink = user_info?.CompanyEmail
-    ? `/resources/it-policy-awareness.html?username=${encodeURIComponent(
-        user_info.CompanyEmail
-      )}`
-    : "/resources/it-policy-awareness.html";
+  // Static page served by the web server (see public/web.config). The page reads
+  // the signed-in user from the portal token itself, so no username is passed.
+  const itPolicyAwarenessLink = "/resources/it-policy-awareness";
 
   const quicks = [
     {
@@ -103,6 +98,7 @@ const ResourceForms = () => {
       link: itPolicyAwarenessLink,
       btn_text: "Click to View",
       download: false,
+      sameTab: true,
     },
   ];
   return (
@@ -113,15 +109,24 @@ const ResourceForms = () => {
             <div className="card">
               <h6>{q.title}</h6>
               <p>
-                <Link
-                  to={q.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={q.download !== false}
-                >
-                  <FileText size={19} />
-                  &nbsp;{q.btn_text}
-                </Link>
+                {q.sameTab ? (
+                  // Plain anchor on purpose: full page load in the same tab,
+                  // because this is a static page, not a React route.
+                  <a href={q.link}>
+                    <FileText size={19} />
+                    &nbsp;{q.btn_text}
+                  </a>
+                ) : (
+                  <Link
+                    to={q.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={q.download !== false}
+                  >
+                    <FileText size={19} />
+                    &nbsp;{q.btn_text}
+                  </Link>
+                )}
                 {/* <Link
                   to={"/documents/" + leave_info.empNo + "/p9/" + p}
                   target="_blank"

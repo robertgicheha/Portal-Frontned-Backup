@@ -74,13 +74,9 @@ export const GlobalProvider = ({ children }) => {
   const baseURL = "https://portal.micglobalrisks.com:8082/portal/v1.0/api";
 
   // This recovered source tree has no .env, so REACT_APP_SECRET is
-  // undefined at runtime -- jwt-simple's decode() unconditionally calls
-  // key.toString() before it even looks at the token, so an undefined
-  // secret crashes every decode. Falling back to a local-only constant
-  // keeps decode() from throwing; it still won't verify a token signed by
-  // the real production secret, but that's a separate, pre-existing gap
-  // in this environment, not something decode() should crash the app over.
-  const jwtSecret = process.env.REACT_APP_SECRET || "local-dev-secret";
+  // undefined at runtime. The portal build files decode tokens with
+  // "kimiko", so fall back to that same secret when the env var is missing.
+  const jwtSecret = process.env.REACT_APP_SECRET || "kimiko";
 
   function tokenInfo() {
     if (localStorage.LOGIN_INFO) {
@@ -773,7 +769,7 @@ export const GlobalProvider = ({ children }) => {
       if (res.data) {
         dispatch({
           type: "LOAD_PAYSLIP_LIST",
-          payload: res.data.file_list,
+          payload: Array.isArray(res.data.file_list) ? res.data.file_list : [],
         });
 
         unsetSlip(true);

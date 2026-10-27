@@ -223,7 +223,7 @@ const TRAINING_CODE = "EHS/MIC-SECURITY-2026";
 
 const API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api/it_policy_awareness";
 // Base for the portal's own endpoints (e.g. /user/info), which do NOT live
-// under /it_policy_awareness.
+// under /it_policy_awareness. Training endpoints are flat files: ${API_BASE}/<name>.php
 const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api";
 
 // The confirmed live PHP middleware (api/training/*.php) guards
@@ -267,7 +267,7 @@ const DataAdapter = {
   // Starts a new attempt for this employee + entity + training code and
   // returns the authoritative attemptNo used by every subsequent call.
   async startAttempt({ employeeId, entity, trainingCode = TRAINING_CODE }){
-    const res = await fetch(`${API_BASE}/training/attempts`, {
+    const res = await fetch(`${API_BASE}/start-attempt.php`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ employeeId, entity, trainingCode })
@@ -277,7 +277,7 @@ const DataAdapter = {
     return json; // { status, attemptNo, employeeNo, dateStarted }
   },
 
-  // POST /api/training/answers
+  // POST /api/it_policy_awareness/submit-answers.php
   // Submitted the instant an option is picked, so NAV is updated answer by
   // answer as they come in (like a tallying centre), not in one batch at the
   // end. Body matches NAV's getITtrainingAnswers(empNumber, attemptNo,
@@ -292,7 +292,7 @@ const DataAdapter = {
     const MAX_TRIES = 3;
     for(let attempt = 1; attempt <= MAX_TRIES; attempt++){
       try{
-        const res = await fetch(`${API_BASE}/training/answers`, {
+        const res = await fetch(`${API_BASE}/submit-answers.php`, {
           method: "POST",
           headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ empNumber, attemptNo, entity, questionNumber, selectedOption })
@@ -309,13 +309,13 @@ const DataAdapter = {
     return { ok: false, isCorrect: undefined };
   },
 
-  // POST /api/training/complete-training
+  // POST /api/it_policy_awareness/final-submit.php
   // Called once after the last question. Maps to NAV's
   // submitQuestions(empNumber, attemptNo), which finalises the attempt from
   // the answers NAV already received one by one -- correctness is never
   // computed client-side.
   async completeAttempt({ empNumber, attemptNo, entity }){
-    const res = await fetch(`${API_BASE}/training/complete-training`, {
+    const res = await fetch(`${API_BASE}/final-submit.php`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ empNumber, attemptNo, entity })
@@ -330,10 +330,10 @@ const DataAdapter = {
   // in the JSON body (no session-derived identity yet), so nothing is
   // exposed in the URL.
   async getCompletion({ employeeId, entity, trainingCode = TRAINING_CODE }){
-    const res = await fetch(`${API_BASE}/training/completion`, {
-      method: "POST",
-      headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ employeeId, entity, trainingCode })
+    const params = new URLSearchParams({ employeeId, entity, trainingCode });
+    const res = await fetch(`${API_BASE}/completion.php?${params.toString()}`, {
+      method: "GET",
+      headers: policyAwarenessHeaders()
     });
     const json = await res.json();
     if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not load your completion status");
@@ -409,9 +409,14 @@ function normalizeEntity(name){
 // Fetches this employee's questions (and the employee header NAV sends back:
 // full name, company, department) from the middleware. Shapes NAV's fields
 // into what renderQuiz() expects (q.q, q.opts, q.optionNos).
+// NAV sometimes double-escapes characters (e.g. a literal "\\u2014"); decode them.
+function decodeEscapes(v){
+  return String(v == null ? "" : v).replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 async function fetchITQuestions(employeeId, entity){
   const qs = new URLSearchParams({ employeeId, entity });
-  const res = await fetch(`${API_BASE}/training/questions?${qs}`, {
+  const res = await fetch(`${API_BASE}/questions.php?${qs}`, {
     method: "GET",
     headers: policyAwarenessHeaders()
   });
@@ -420,21 +425,23 @@ async function fetchITQuestions(employeeId, entity){
 
   const questions = (json.questions || []).map(q => ({
     questionNo: q.questionNo,
-    chapter: q.chapter,
-    q: q.question,
-    opts: q.options.map(o => o.option),
-    optionNos: q.options.map(o => o.optionNo),
-    note: q.note || ""
+    chapter: decodeEscapes(q.chapter),
+    q: decodeEscapes(q.question),
+    opts: (q.options || []).map(o => decodeEscapes(o.option)),
+    optionNos: (q.options || []).map(o => o.optionNo),
+    note: decodeEscapes(q.note)
   }));
   const e = json.employee || {};
   return {
     questions,
-    attemptNo: Number(json.attemptNo) || null,
+    attemptNo: Number(json.attemptNo) || Number((json.questions || [])[0] && json.questions[0].attemptNo) || null,
     employee: {
-      name: e.name || "",
-      employeeId: e.employeeId || "",
+      // NAV sends { fullName, company, dept }; older shape was { name, department }.
+      // Values can carry trailing spaces (e.g. "Information Technology "), so trim.
+      name: String(e.fullName || e.name || "").trim(),
+      employeeId: String(e.employeeId || e.employeeNo || employeeId || "").trim(),
       entity: normalizeEntity(e.company),
-      department: e.department || ""
+      department: String(e.dept || e.department || "").trim()
     }
   };
 }
@@ -478,12 +485,31 @@ async function fetchEmployeeNumber(username){
   return details.employeeId;
 }
 
+// The portal opens this page with a clean URL (no query string). The signed-in
+// username is read the same way GlobalState.js tokenInfo() does: it is
+// data.username inside the JWT stored in localStorage.LOGIN_INFO (same origin).
+// A ?username= param is still honoured if present.
+function resolveUsername(){
+  const fromUrl = (new URLSearchParams(window.location.search).get("username") || "").trim();
+  if(fromUrl) return fromUrl;
+  try{
+    const parts = (localStorage.getItem("LOGIN_INFO") || "").split(".");
+    if(parts.length === 3){
+      const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(atob(b64 + "=".repeat((4 - b64.length % 4) % 4)));
+      const u = payload && payload.data && payload.data.username;
+      if(u && String(u).trim()) return String(u).trim();
+    }
+  }catch(e){ console.error("[it-policy] could not read LOGIN_INFO:", e); }
+  return "";
+}
+
 function getUrlParams(){
   const p = new URLSearchParams(window.location.search);
   const rawEntity = p.get("entity") || "";
   const entity = ENTITY_CODES[rawEntity.toUpperCase()] || (ENTITIES.includes(rawEntity) ? rawEntity : "");
   return {
-    username: p.get("username") || "",
+    username: resolveUsername(),
     name: p.get("name") || "",
     employeeId: p.get("id") || "",
     department: p.get("dept") || "",
@@ -564,6 +590,7 @@ async function boot(){
       }catch(e){ state.priorCompletion = null; }
     }
   }catch(e){
+    console.error("[it-policy] auto-load failed:", e);
     // Auto-prefill/auto-fetch failed (e.g. NAV unreachable) -- fall through
     // to the intro screen. If identity is still incomplete it shows the
     // manual-entry form; if questions didn't load, "Begin" retries the
@@ -608,10 +635,7 @@ function renderIntro(){
       <label for="f-id">Employee ID</label>
       <input type="text" id="f-id" placeholder="e.g. EHS-0142" value="${escapeHtml(state.employeeId)}"/>
       <label for="f-entity">Entity</label>
-      <select id="f-entity">
-        <option value="">Select your entity…</option>
-        ${entityOptions}
-      </select>
+      <input type="text" id="f-entity" placeholder="e.g. MIC or EHS" value="${escapeHtml(state.entity)}" autocomplete="off"/>
       <label for="f-dept">Department</label>
       <input type="text" id="f-dept" placeholder="e.g. Claims, Underwriting, IT" value="${escapeHtml(state.department)}"/>
     `}
@@ -636,15 +660,24 @@ function renderIntro(){
     if(!prefilled){
       const name = document.getElementById("f-name").value.trim();
       const id = document.getElementById("f-id").value.trim();
-      const entity = document.getElementById("f-entity").value;
+      const entityRaw = document.getElementById("f-entity").value.trim();
       const dept = document.getElementById("f-dept").value.trim();
-      if(!name || !id || !entity || !dept){
-        const err = document.getElementById("intro-err");
+      const err = document.getElementById("intro-err");
+      if(!name || !id || !entityRaw || !dept){
         err.textContent = "Please fill in all fields, including your entity, to continue.";
         err.style.display = "block";
         showToast("Please fill in all required fields.", "error");
         return;
       }
+      // Resolve whatever was typed (MIC, EHS, full name…) to the official entity name
+      const entity = normalizeEntity(entityRaw);
+      if(!entity){
+        err.textContent = "We couldn't recognise that entity. Please type MIC or EHS.";
+        err.style.display = "block";
+        showToast("Unrecognised entity. Please type MIC or EHS.", "error");
+        return;
+      }
+      err.style.display = "none";
       state.name = name; state.employeeId = id; state.entity = entity; state.department = dept;
       showToast("Details confirmed. Loading policy questions…", "success");
     } else {
@@ -786,8 +819,8 @@ function renderQuiz(){
   app.innerHTML = `
     <div class="progress-label">Step 2 of 2 &mdash; Question ${state.qIndex + 1} of ${questions.length}</div>
     <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-    <span class="chapter-tag">${q.chapter}</span>
-    <p class="q-text">${q.q}</p>
+    <span class="chapter-tag">${escapeHtml(q.chapter)}</span>
+    <p class="q-text">${escapeHtml(q.q)}</p>
     <div id="opts"></div>
     <div id="fb"></div>
     <div class="row-btns">
@@ -836,9 +869,9 @@ function renderQuiz(){
       }
       if(typeof isCorrect === "boolean"){
         optsEl.children[i].classList.add(isCorrect ? "correct" : "incorrect");
-        fb.innerHTML = `<div class="feedback ${isCorrect ? "good" : "bad"}">${isCorrect ? "Correct. " : "Not quite. "}${q.note || ""}</div>`;
+        fb.innerHTML = `<div class="feedback ${isCorrect ? "good" : "bad"}">${isCorrect ? "Correct. " : "Not quite. "}${escapeHtml(q.note || "")}</div>`;
       } else {
-        fb.innerHTML = `<div class="feedback">${ok ? "Answer recorded." : "Could not confirm your answer right now — it will be scored when you finish."} ${q.note || ""}</div>`;
+        fb.innerHTML = `<div class="feedback">${ok ? "Answer recorded." : "Could not confirm your answer right now — it will be scored when you finish."} ${escapeHtml(q.note || "")}</div>`;
       }
       document.getElementById("next-btn").disabled = false;
     };
