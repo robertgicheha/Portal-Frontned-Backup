@@ -32,10 +32,22 @@ const Payslip = () => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const removeSlip = (emp_id) => {
+    if (!emp_id) return;
+
     setTimeout(function () {
       deleteSlip(emp_id);
     }, 120000);
   };
+
+  const employeeNumber = () =>
+    String(
+      leave_info.empNo ||
+        user_info.EmployeeNumber ||
+        user_info.employeeNumber ||
+        leave_info.EmployeeNumber ||
+        leave_info.employeeNumber ||
+        ""
+    ).trim();
 
   const menu = {
     title: "Payslip",
@@ -123,16 +135,7 @@ const Payslip = () => {
     data["date_filter"] = data["year"] + "-" + data["month"] + "-01";
 
     // loadingStatus(true);
-    const employeeNumber = String(
-      leave_info.empNo ||
-      user_info.EmployeeNumber ||
-      user_info.employeeNumber ||
-      leave_info.EmployeeNumber ||
-      leave_info.employeeNumber ||
-      ""
-    ).trim();
-
-    getPaySlip(data.date_filter, employeeNumber, company);
+    getPaySlip(data.date_filter, employeeNumber(), company);
 
     reset();
   };
@@ -149,13 +152,8 @@ const Payslip = () => {
 
     return () => {
       if (Number(payslips) > 0) {
-        deleteSlip(
-          user_info.EmployeeNumber ||
-            user_info.employeeNumber ||
-            leave_info.empNo ||
-            leave_info.EmployeeNumber ||
-            leave_info.employeeNumber
-        );
+        const id = employeeNumber();
+        if (id) deleteSlip(id);
       }
     };
 
@@ -164,13 +162,7 @@ const Payslip = () => {
 
   useEffect(() => {
     if (downloadSlip) {
-      removeSlip(
-        user_info.EmployeeNumber ||
-          user_info.employeeNumber ||
-          leave_info.empNo ||
-          leave_info.EmployeeNumber ||
-          leave_info.employeeNumber
-      );
+      removeSlip(employeeNumber());
     }
 
     // eslint-disable-next-line
@@ -362,13 +354,7 @@ const Payslip = () => {
                                   className="back-payslip"
                                   to="/profile/payslip"
                                   onClick={() =>
-                                    deleteSlip(
-                                      user_info.EmployeeNumber ||
-                                        user_info.employeeNumber ||
-                                        leave_info.empNo ||
-                                        leave_info.EmployeeNumber ||
-                                        leave_info.employeeNumber
-                                    )
+                                    deleteSlip(employeeNumber())
                                   }
                                 >
                                   <ChevronsLeft size={16} />

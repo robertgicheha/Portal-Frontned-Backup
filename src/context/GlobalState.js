@@ -672,6 +672,12 @@ export const GlobalProvider = ({ children }) => {
   }
 
   async function deleteSlip(id) {
+    const slipId = String(id || "").trim();
+
+    if (!slipId || slipId === "undefined" || slipId === "null") {
+      return;
+    }
+
     try {
       const config = {
         headers: {
@@ -681,7 +687,7 @@ export const GlobalProvider = ({ children }) => {
       };
 
       const res = await axios.get(
-        `${baseURL}/user/unlink_slip?id=${id}`,
+        `${baseURL}/user/unlink_slip?id=${encodeURIComponent(slipId)}`,
         config
       );
 
@@ -751,14 +757,20 @@ export const GlobalProvider = ({ children }) => {
     loadingStatus(true);
 
     const info = tokenInfo();
-    let employeeNumber =
+    let employeeNumber = String(
       emp ||
-      state.user_info.EmployeeNumber ||
-      state.user_info.employeeNumber ||
-      state.leave_info.empNo ||
-      state.leave_info.EmployeeNumber ||
-      state.leave_info.employeeNumber ||
-      "";
+        state.user_info.EmployeeNumber ||
+        state.user_info.employeeNumber ||
+        state.user_info.employeeNo ||
+        state.user_info.employee_no ||
+        state.leave_info.empNo ||
+        state.leave_info.EmployeeNumber ||
+        state.leave_info.employeeNumber ||
+        state.leave_info.employeeNo ||
+        state.leave_info.employee_no ||
+        (info && info.data && (info.data.EmployeeNumber || info.data.employeeNumber)) ||
+        ""
+    ).trim();
 
     try {
       const config = {
@@ -777,16 +789,42 @@ export const GlobalProvider = ({ children }) => {
           config
         );
         const leaveData = leaveResponse.data && leaveResponse.data.data;
-        employeeNumber =
+        employeeNumber = String(
           (leaveData &&
             (leaveData.empNo ||
               leaveData.EmployeeNumber ||
-              leaveData.employeeNumber)) ||
-          "";
+              leaveData.employeeNumber ||
+              leaveData.employeeNo ||
+              leaveData.employee_no ||
+              leaveData["Employee No."])) ||
+            ""
+        ).trim();
+      }
+
+      if (!employeeNumber && info && info.data && info.data.username) {
+        const userResponse = await axios.get(
+          `${baseURL}/user/info?username=${encodeURIComponent(info.data.username)}`,
+          config
+        );
+        const userData = userResponse.data && userResponse.data.data;
+        employeeNumber = String(
+          (userData &&
+            (userData.EmployeeNumber ||
+              userData.employeeNumber ||
+              userData.employeeNo ||
+              userData.employee_no ||
+              userData["Employee No."])) ||
+            ""
+        ).trim();
       }
 
       if (!employeeNumber) {
-        throw new Error("Could not determine the employee number for this payslip.");
+        Swal.fire(
+          "Payslip unavailable",
+          "We could not determine your employee number. Please refresh your profile and try again.",
+          "error"
+        );
+        return;
       }
 
       const res = await axios.get(
@@ -812,6 +850,11 @@ export const GlobalProvider = ({ children }) => {
       unsetSlip(true);
     } catch (error) {
       if (axios.isCancel(error)) return;
+      Swal.fire(
+        "Payslip unavailable",
+        "We could not generate the payslip right now. Please try again.",
+        "error"
+      );
     } finally {
       loadingStatus(false);
     }

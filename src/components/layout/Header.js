@@ -85,34 +85,43 @@ const Header = () => {
   };
 
   const employeeName = (() => {
-    const details = user_info || {};
-    const updateDetails = user_info_to_update || {};
-    const fullName =
-      details.FullName ||
-      details.fullName ||
-      details["Full Name"] ||
-      details.Name ||
-      details.name ||
-      updateDetails.FullName ||
-      updateDetails.fullName ||
-      updateDetails["Full Name"] ||
-      updateDetails.Name ||
-      updateDetails.name;
-    if (fullName) return String(fullName).trim();
+    const sources = [user_info, user_info_to_update]
+      .filter(Boolean)
+      .reduce((values, source) => {
+        const nestedSource =
+          source.data && typeof source.data === "object" ? source.data : source;
+        return values.concat(nestedSource);
+      }, []);
+
+    const readValue = (keys) => {
+      for (const source of sources) {
+        for (const key of keys) {
+          if (source[key]) return String(source[key]).trim();
+        }
+      }
+      return "";
+    };
+
+    const fullName = readValue([
+      "FullName",
+      "fullName",
+      "full_name",
+      "Full Name",
+      "EmployeeName",
+      "employeeName",
+      "employee_name",
+      "Employee Name",
+      "displayName",
+      "Name",
+      "name",
+    ]);
+
+    if (fullName) return fullName;
 
     return [
-      details.FirstName ||
-        details.firstName ||
-        updateDetails.FirstName ||
-        updateDetails.firstName,
-      details.MiddleName ||
-        details.middleName ||
-        updateDetails.MiddleName ||
-        updateDetails.middleName,
-      details.LastName ||
-        details.lastName ||
-        updateDetails.LastName ||
-        updateDetails.lastName,
+      readValue(["FirstName", "firstName", "first_name"]),
+      readValue(["MiddleName", "middleName", "middle_name"]),
+      readValue(["LastName", "lastName", "last_name"]),
     ]
       .filter(Boolean)
       .join(" ")
