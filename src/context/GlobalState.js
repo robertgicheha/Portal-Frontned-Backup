@@ -751,7 +751,7 @@ export const GlobalProvider = ({ children }) => {
     loadingStatus(true);
 
     const info = tokenInfo();
-    const employeeNumber =
+    let employeeNumber =
       emp ||
       state.user_info.EmployeeNumber ||
       state.user_info.employeeNumber ||
@@ -767,6 +767,28 @@ export const GlobalProvider = ({ children }) => {
           Authorization: localStorage.LOGIN_INFO,
         },
       };
+
+      // The payslip page can be submitted before the asynchronous profile
+      // requests finish. Resolve the employee number from the leave endpoint
+      // before requesting the payslip instead of sending emp_no=.
+      if (!employeeNumber && info && info.data && info.data.username) {
+        const leaveResponse = await axios.get(
+          `${baseURL}/leave/info?email=${encodeURIComponent(info.data.username)}`,
+          config
+        );
+        const leaveData = leaveResponse.data && leaveResponse.data.data;
+        employeeNumber =
+          (leaveData &&
+            (leaveData.empNo ||
+              leaveData.EmployeeNumber ||
+              leaveData.employeeNumber)) ||
+          "";
+      }
+
+      if (!employeeNumber) {
+        throw new Error("Could not determine the employee number for this payslip.");
+      }
+
       const res = await axios.get(
         `${baseURL}/user/slip?username=${encodeURIComponent(
           info.data.username
@@ -780,14 +802,14 @@ export const GlobalProvider = ({ children }) => {
 
       // console.log(res.data.error);
 
-      if (res.data) {
-        dispatch({
-          type: "LOAD_PAYSLIP_LIST",
-          payload: Number(res.data.file_list) || 0,
-        });
+      dispatch({
+        type: "LOAD_PAYSLIP_LIST",
+        payload: Number(res.data && res.data.file_list) || 0,
+      });
 
-        unsetSlip(true);
-      }
+      // A successful response may contain no files, but it is still the
+      // completed results state and must not leave the form stuck loading.
+      unsetSlip(true);
     } catch (error) {
       if (axios.isCancel(error)) return;
     } finally {

@@ -15,6 +15,7 @@ const Header = () => {
     globals,
     leave_approvals,
     user_info,
+    user_info_to_update,
     getUserDetails,
     getLeaveApprovals,
     getNotifications,
@@ -83,6 +84,41 @@ const Header = () => {
       "https://portal.micglobalrisks.com:8081/documents/defaults/user.png";
   };
 
+  const employeeName = (() => {
+    const details = user_info || {};
+    const updateDetails = user_info_to_update || {};
+    const fullName =
+      details.FullName ||
+      details.fullName ||
+      details["Full Name"] ||
+      details.Name ||
+      details.name ||
+      updateDetails.FullName ||
+      updateDetails.fullName ||
+      updateDetails["Full Name"] ||
+      updateDetails.Name ||
+      updateDetails.name;
+    if (fullName) return String(fullName).trim();
+
+    return [
+      details.FirstName ||
+        details.firstName ||
+        updateDetails.FirstName ||
+        updateDetails.firstName,
+      details.MiddleName ||
+        details.middleName ||
+        updateDetails.MiddleName ||
+        updateDetails.middleName,
+      details.LastName ||
+        details.lastName ||
+        updateDetails.LastName ||
+        updateDetails.lastName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  })();
+
   useEffect(() => {
     getUserDetails();
     getLeaveApprovals();
@@ -135,8 +171,7 @@ const Header = () => {
                   <div className="arrow-up"></div>
                   <ul>
                     <li>
-                      {user_info.FirstName ? user_info.FirstName : ""}&nbsp;
-                      {user_info.MiddleName ? user_info.MiddleName : ""}
+                      {employeeName}
                     </li>
                     <li>
                       <Link to="/profile">

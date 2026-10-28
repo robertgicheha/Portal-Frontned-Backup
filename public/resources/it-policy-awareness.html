@@ -30,9 +30,10 @@
     padding:32px 16px;
   }
   .wrap{width:100%;max-width:680px;}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--navy);}
+  .brand{display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
   .brand .mark{width:28px;height:28px;border-radius:6px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;}
   .brand .name{font-size:14px;font-weight:600;letter-spacing:.2px;}
+  .brand-logo{display:block;width:100%;max-width:620px;height:auto;}
   .card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:32px 34px;box-shadow:0 1px 2px rgba(16,24,40,.04);}
   h1{font-size:21px;margin:0 0 6px;color:var(--navy);font-weight:700;line-height:1.3;}
   p{line-height:1.55;color:var(--ink);}
@@ -135,7 +136,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="brand"><div class="mark">EHS</div><div class="name">MIC Global Risks / Executive Healthcare Solutions</div></div>
+  <div class="brand"><img class="brand-logo" src="/logo.png" alt="Executive Healthcare Solutions and MIC Global Risks"/></div>
   <div class="card" id="app"></div>
 </div>
 
@@ -239,7 +240,7 @@ const API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api/it_poli
 // Base for the portal's own endpoints (e.g. /user/info), which do NOT live
 // under /it_policy_awareness. Training endpoints are the named PHP routes below.
 const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api";
-const IT_POLICY_AWARENESS_SECRET = "IT_POLICY_AWARENESS_SECRET";
+const IT_POLICY_AWARENESS_SECRET = "lp!tP:H0TwN)wB9v";
 
 // The confirmed live PHP middleware (api/training/*.php) guards
 // this module with a static shared secret rather than the portal's normal
@@ -278,8 +279,8 @@ const DataAdapter = {
   // A dropped send is retried (network errors / 5xx only). If it still fails
   // the caller shows the error and lets the employee pick again, so no answer
   // is silently lost.
-  // NOTE: the middleware never returns isCorrect (spec §10), so the UI falls
-  // through to the generic "answer recorded" message.
+  // Correctness is supplied with each question's options. The selected
+  // option is still submitted immediately so NAV receives every answer.
   async submitAnswer({ empNumber, attemptNo, entity, questionNumber, selectedOption }){
     const MAX_TRIES = 3;
     for(let attempt = 1; attempt <= MAX_TRIES; attempt++){
@@ -287,7 +288,13 @@ const DataAdapter = {
         const res = await fetch(`${API_BASE}/submit_it_answers`, {
           method: "POST",
           headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ empNumber, attemptNo, entity, questionNumber, selectedOption })
+          body: JSON.stringify({
+            empNumber,
+            attemptNo,
+            entity,
+            questionNumber: Number(questionNumber),
+            selectedOption: Number(selectedOption)
+          })
         });
         const json = await res.json();
         if(res.ok && json.status === "success") return { ok: true, isCorrect: json.isCorrect };
@@ -427,7 +434,7 @@ function normalizeEntity(name){
 
 // Fetches this employee's questions (and the employee header NAV sends back:
 // full name, company, department) from the middleware. Shapes NAV's fields
-// into what renderQuiz() expects (q.q, q.opts, q.optionNos).
+// into what renderQuiz() expects (q.q, q.opts, q.optionNos, q.correctOptions).
 // NAV sometimes double-escapes characters (e.g. a literal "\\u2014"); decode them.
 function decodeEscapes(v){
   return String(v == null ? "" : v).replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
@@ -472,6 +479,9 @@ async function fetchITQuestions(employeeId, entity){
     q: decodeEscapes(q.question),
     opts: (q.options || []).map(o => decodeEscapes(o.option)),
     optionNos: (q.options || []).map(o => o.optionNo),
+    correctOptions: (q.options || []).map(o =>
+      o.correct === true || String(o.correct).trim().toLowerCase() === "yes"
+    ),
     note: decodeEscapes(q.note)
   }));
   const e = Object.assign({}, navEmployee, json.employee || {});
@@ -607,7 +617,7 @@ async function boot(){
       state.employeeId = details.employeeId;
       state.department = details.department;
       state.entity = details.entity;
-      showToast(`Welcome, ${details.name}! Your details have been loaded.`, "success");
+      showToast(`Welcome, ${details.name}! Your details have been successfully been fetched. Kindly confirm your details before proceeding with the training.`, "success");
     }
 
     // GetTrainingQuestions is keyed by EmployeeNumber and returns the
@@ -701,7 +711,7 @@ function renderIntro(){
       entity: state.entity,
       department: state.department
     }, async () => {
-      showToast("Details confirmed. Loading policy questions…", "success");
+      showToast("Your details have successfully been confirmed.", "success");
       if(state.questions.length === 0){
         const startBtn = document.getElementById("start-btn");
         startBtn.disabled = true;
@@ -855,12 +865,10 @@ function renderQuiz(){
         el.classList.toggle("selected", j === i);
         el.disabled = true;
       });
-      document.getElementById("fb").innerHTML = `<div class="feedback">Checking your answer…</div>`;
+      document.getElementById("fb").innerHTML = `<div class="feedback"></div>`;
 
-      // The question-retrieval API never tells us which option is correct
-      // (Rule 3), so correctness only comes back once NAV has recorded this
-      // specific pick. Track the promise too, so finishQuiz() can make sure
-      // every answer has actually landed before completing the attempt.
+      // Track the promise so finishQuiz() can make sure every answer has
+      // landed in NAV before completing the attempt.
       const submission = DataAdapter.submitAnswer({
         empNumber: state.employeeId,
         attemptNo: state.attemptNo,
@@ -869,7 +877,7 @@ function renderQuiz(){
         selectedOption: q.optionNos[i]
       });
       state.pendingSubmissions.push(submission);
-      const { ok, isCorrect, message } = await submission;
+      const { ok, message } = await submission;
 
       if(state.qIndex !== qIndexAtRender) return; // moved on already
       const fb = document.getElementById("fb");
@@ -881,12 +889,15 @@ function renderQuiz(){
         state.showFeedback = false;
         return;
       }
-      if(typeof isCorrect === "boolean"){
-        optsEl.children[i].classList.add(isCorrect ? "correct" : "incorrect");
-        fb.innerHTML = `<div class="feedback ${isCorrect ? "good" : "bad"}">${isCorrect ? "Correct. " : "Not quite. "}${escapeHtml(q.note || "")}</div>`;
-      } else {
-        fb.innerHTML = `<div class="feedback">${ok ? "Answer recorded." : "Could not confirm your answer right now — it will be scored when you finish."} ${escapeHtml(q.note || "")}</div>`;
-      }
+      const optionIsCorrect = Array.isArray(q.correctOptions) && q.correctOptions[i] === true;
+      [...optsEl.children].forEach((el, j) => {
+        const isCorrectOption = Array.isArray(q.correctOptions) && q.correctOptions[j] === true;
+        el.classList.toggle("correct", isCorrectOption);
+        el.classList.toggle("incorrect", j === i && !isCorrectOption);
+        if(isCorrectOption) el.title = "Correct answer";
+      });
+      const answeredCorrectly = optionIsCorrect;
+      fb.innerHTML = `<div class="feedback ${answeredCorrectly ? "good" : "bad"}">${answeredCorrectly ? "Correct. " : "Not quite. "}${escapeHtml(q.note || "")}</div>`;
       document.getElementById("next-btn").disabled = false;
     };
     optsEl.appendChild(b);
@@ -920,10 +931,7 @@ async function finishQuiz(){
       completedDate: result.completedDate || new Date().toISOString()
     });
   }catch(e){
-    // Per-question correctness is never sent to the browser (Rule 3), so
-    // there is no honest local score to fall back to here -- the live
-    // submit-answer.php response never includes isCorrect. Surface the
-    // failure plainly instead of fabricating a result.
+    // Surface submission failures plainly instead of fabricating a result.
     state.saveError = friendlyError(e, "Could not submit your completion to NAV. Please notify IT and try again.");
     state.lastRecord = null;
   }

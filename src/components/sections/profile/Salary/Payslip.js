@@ -124,9 +124,9 @@ const Payslip = () => {
 
     // loadingStatus(true);
     const employeeNumber = String(
+      leave_info.empNo ||
       user_info.EmployeeNumber ||
       user_info.employeeNumber ||
-      leave_info.empNo ||
       leave_info.EmployeeNumber ||
       leave_info.employeeNumber ||
       ""

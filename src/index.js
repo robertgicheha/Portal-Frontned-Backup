@@ -14,7 +14,7 @@ import "react-datepicker/dist/react-datepicker.css";
 const maintenance = false;
 
 ReactDOM.render(
-  <BrowserRouter basename="/" forceRefresh>
+  <BrowserRouter basename="/">
     {maintenance ? null : <App />}
   </BrowserRouter>,
   document.getElementById("root")
