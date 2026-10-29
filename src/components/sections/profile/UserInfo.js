@@ -71,13 +71,6 @@ const GeneralInfo = ({
     // eslint-disable-next-line
   }, [isUpdatingProfile]);
 
-  useEffect(() => {
-    return () => {
-      isUpdatingProfile(false);
-    };
-    // eslint-disable-next-line
-  }, []);
-
   return (
     <>
       <ProfilePicture staff={user_info.EmployeeNumber} />

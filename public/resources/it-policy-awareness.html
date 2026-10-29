@@ -17,6 +17,7 @@
     --flag-bg:#fbeaec;
     --good-bg:#eaf4ee;
   }
+  .opt .tick{float:right;color:var(--good);font-weight:700;margin-left:10px;}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -67,6 +68,7 @@
   .feedback{margin-top:14px;font-size:13.5px;padding:10px 12px;border-radius:7px;line-height:1.5;}
   .feedback.good{background:var(--good-bg);color:var(--good);border-left:4px solid var(--good);}
   .feedback.bad{background:var(--flag-bg);color:var(--flag);border-left:4px solid var(--flag);}
+  .feedback.neutral{background:var(--bg);color:var(--ink);border-left:4px solid var(--navy);}
   .save-status{margin-top:8px;font-size:12.5px;color:var(--muted);}
   .save-status.err{color:var(--flag);}
   .save-status .btn{padding:4px 10px;font-size:12px;margin-left:8px;}
@@ -231,7 +233,10 @@ const CHAPTERS = [
 
 // Questions are no longer hardcoded -- fetchITQuestions() below pulls them
 // live from Business Central for the signed-in employee. state.questions
-// holds whatever came back for the current session.
+// holds whatever came back for the current session. Each question carries:
+//   questionNo, chapter, q (text), opts[], optionNos[], correctOptions[]
+//   (from NAV's per-option "correct" Yes/No), note (NAV's explanation) and
+//   attemptNo (NAV's attempt number for this question row).
 
 const ENTITIES = [
   "MIC Global Risks (Insurance Brokers) Limited",
@@ -241,25 +246,20 @@ const ENTITY_CODES = { "MIC": ENTITIES[0], "EHS": ENTITIES[1] };
 
 const PASS_THRESHOLD = 0.75;
 const MIN_VIEW_SECONDS = 8;
-// Matches the live middleware's PolicyAwareness::DEFAULT_TRAINING_CODE and
-// the integration requirements doc's own example (spec §9).
-const TRAINING_CODE = "EHS/MIC-SECURITY-2026";
 
 const API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api/it_policy_awareness";
 // Base for the portal's own endpoints (e.g. /user/info), which do NOT live
 // under /it_policy_awareness. Training endpoints are the named PHP routes below.
 const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api";
-const IT_POLICY_AWARENESS_SECRET = "lp!tP:H0TwN)wB9v";
 
-// The confirmed live PHP middleware (api/training/*.php) guards
-// this module with a static shared secret rather than the portal's normal
-// session bearer -- its own comments acknowledge this is a known gap versus
-// the integration doc's ideal ("employee identity from an authenticated
-// token"), not something fixable from the frontend alone. Kept here as-is
-// so the quiz actually authenticates against the real backend; it does NOT
-// meet the doc's Section 15 bar (a secret embedded in JS is inherently
-// readable by anyone, as this very repo's own recovery history shows) and
-// should be revisited once the middleware supports real session auth.
+// Shared secret for the training endpoints. It MUST match the server's
+// IT_POLICY_AWARENESS_SECRET environment variable. The previous value was
+// exposed and has been retired -- set the NEW value here at deploy time.
+// Note: a secret in browser JavaScript is readable by anyone who can load
+// this page, so it only keeps out callers who never opened the page. Real
+// protection needs the middleware to accept the portal's session bearer.
+const IT_POLICY_AWARENESS_SECRET = "REPLACE_WITH_NEW_SECRET";
+
 function policyAwarenessHeaders(extra){
   return Object.assign({ "X-Internal-Token": IT_POLICY_AWARENESS_SECRET }, extra || {});
 }
@@ -274,22 +274,19 @@ function portalAuthHeaders(extra){
 /* ============================================================================
    DATA ADAPTER -- THE ONLY SECTION THAT NEEDS TO CHANGE FOR BACKEND INTEGRATION
    ----------------------------------------------------------------------------
-   The frontend uses the four available PHP operations:
-   fetch_it_questions, submit-it_answers, final_it_submit, and the
+   The frontend uses the three PHP operations:
+   fetch_it_questions, submit_it_answers, final_it_submit, and the
    ITPolicyAwareness model behind them.
    ============================================================================ */
 const DataAdapter = {
   // POST /api/it_policy_awareness/submit_it_answers
   // Submitted the instant an option is picked, so NAV is updated answer by
-  // answer as they come in (like a tallying centre), not in one batch at the
-  // end. Body matches NAV's getITtrainingAnswers(empNumber, attemptNo,
-  // questionNumber, selectedOption); entity is only used by the middleware to
-  // pick the MIC or EHS NAV company.
+  // answer as they come in, not in one batch at the end. Body matches NAV's
+  // getITtrainingAnswers(empNumber, attemptNo, questionNumber, selectedOption);
+  // entity is only used by the middleware to pick the MIC or EHS NAV company.
   // A dropped send is retried (network errors / 5xx only). If it still fails
   // the caller shows a Retry button for the SAME option, so no answer is
   // silently lost.
-  // Correctness is supplied with each question's options, so the quiz shows
-  // right/wrong feedback immediately without waiting for this call.
   async submitAnswer({ empNumber, attemptNo, entity, questionNumber, selectedOption }){
     const MAX_TRIES = 3;
     for(let attempt = 1; attempt <= MAX_TRIES; attempt++){
@@ -298,35 +295,41 @@ const DataAdapter = {
           method: "POST",
           headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
+            token: IT_POLICY_AWARENESS_SECRET,
             empNumber,
-            attemptNo,
+            attemptNo: Number(attemptNo),
             entity,
             questionNumber: Number(questionNumber),
             selectedOption: Number(selectedOption)
           })
         });
         const json = await res.json();
-        if(res.ok && json.status === "success") return { ok: true, isCorrect: json.isCorrect };
+        if(res.ok && json.status === "success") return { ok: true };
         // A validation / NAV business rejection (4xx) won't improve on retry
-        if(res.status < 500) return { ok: false, message: json.message, isCorrect: undefined };
+        if(res.status < 500) return { ok: false, message: json.message };
       }catch(e){
         // network error or unreadable response -- fall through and retry
       }
       if(attempt < MAX_TRIES) await new Promise(r => setTimeout(r, 600 * attempt));
     }
-    return { ok: false, isCorrect: undefined };
+    return { ok: false };
   },
 
   // POST /api/it_policy_awareness/final_it_submit
   // Called once after the last question. Maps to NAV's
   // submitQuestions(empNumber, attemptNo), which finalises the attempt from
-  // the answers NAV already received one by one -- correctness is never
+  // the answers NAV already received one by one -- the score is NAV's, never
   // computed client-side.
   async completeAttempt({ empNumber, attemptNo, entity }){
     const res = await fetch(`${API_BASE}/final_it_submit`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ empNumber, attemptNo, entity })
+      body: JSON.stringify({
+        token: IT_POLICY_AWARENESS_SECRET,
+        empNumber,
+        attemptNo: Number(attemptNo),
+        entity
+      })
     });
     const json = await res.json();
     if(!res.ok || json.status !== "success") throw new Error(json.message || "Could not submit your completion to NAV");
@@ -441,14 +444,36 @@ function normalizeEntity(name){
   return "";
 }
 
-// Fetches this employee's questions (and the employee header NAV sends back:
-// full name, company, department) from the middleware. Shapes NAV's fields
-// into what renderQuiz() expects (q.q, q.opts, q.optionNos, q.correctOptions).
 // NAV sometimes double-escapes characters (e.g. a literal "\\u2014"); decode them.
 function decodeEscapes(v){
   return String(v == null ? "" : v).replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
+// Case-insensitive lookup of the first matching key, so "Note", "AttemptNo"
+// or "isCorrect" from NAV are not silently missed.
+function pick(obj, keys, fallback){
+  if(!obj || typeof obj !== "object") return fallback;
+  for(const k of keys){
+    if(Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined) return obj[k];
+  }
+  const lower = {};
+  Object.keys(obj).forEach(k => { lower[k.toLowerCase()] = obj[k]; });
+  for(const k of keys){
+    const v = lower[k.toLowerCase()];
+    if(v !== undefined) return v;
+  }
+  return fallback;
+}
+
+// NAV's "correct" flag: "Yes"/"No" (also accepts true/1/y).
+function isYes(v){
+  return v === true || ["yes", "true", "1", "y"].includes(String(v == null ? "" : v).trim().toLowerCase());
+}
+
+// Fetches this employee's questions (and the employee header NAV sends back:
+// full name, company, department) from the middleware. Shapes NAV's fields
+// into what renderQuiz() expects (q.q, q.opts, q.optionNos, q.correctOptions,
+// q.note, q.attemptNo).
 async function fetchITQuestions(employeeId, entity){
   let res;
   let json = {};
@@ -456,7 +481,11 @@ async function fetchITQuestions(employeeId, entity){
     res = await fetch(`${API_BASE}/fetch_it_questions`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ employeeId, entity })
+      body: JSON.stringify({
+        token: IT_POLICY_AWARENESS_SECRET,
+        employeeId,
+        entity
+      })
     });
     const responseText = await res.text();
     try{
@@ -474,31 +503,59 @@ async function fetchITQuestions(employeeId, entity){
     throw new Error(json.message || "Could not load the knowledge check questions");
   }
 
-  // The NAV operation returns { error, message, data: [...] }. The first
-  // data item contains the employee header and the remaining items are
-  // questions. Also accept the PHP wrapper shape when it is returned.
-  const navData = Array.isArray(json.data) ? json.data : [];
-  const navEmployee = navData.find(item => item && item.fullName) || {};
-  const rawQuestions = Array.isArray(json.questions)
+  // The PHP wrapper returns { status, questions, employee, attemptNo }. Also
+  // accept the raw NAV shape { error, message, data: [...] } where the first
+  // data item is the employee header, and a nested data object.
+  const payloadData = json.data;
+  const navData = Array.isArray(payloadData) ? payloadData : [];
+  const dataObject = payloadData && !Array.isArray(payloadData) && typeof payloadData === "object"
+    ? payloadData
+    : {};
+  const candidateQuestions = Array.isArray(json.questions)
     ? json.questions
-    : navData.filter(item => item && item.questionNo);
-  const questions = rawQuestions.map(q => ({
-    questionNo: q.questionNo,
-    chapter: decodeEscapes(q.chapter),
-    q: decodeEscapes(q.question),
-    opts: (q.options || []).map(o => decodeEscapes(o.option)),
-    optionNos: (q.options || []).map(o => o.optionNo),
-    correctOptions: (q.options || []).map(o =>
-      o.correct === true || String(o.correct).trim().toLowerCase() === "yes"
-    ),
-    note: decodeEscapes(q.note)
-  }));
+    : Array.isArray(dataObject.questions)
+      ? dataObject.questions
+      : navData;
+  const rawQuestions = candidateQuestions.filter(item =>
+    item && (pick(item, ["questionNo", "questionNumber"]) || pick(item, ["question", "questionText"]))
+  );
+  const navEmployee = navData.find(item => item && pick(item, ["fullName"])) ||
+    candidateQuestions.find(item => item && pick(item, ["fullName"]) && !pick(item, ["questionNo"])) ||
+    (dataObject.employee && typeof dataObject.employee === "object" ? dataObject.employee : {});
+
+  const questions = rawQuestions.map(q => {
+    const options = Array.isArray(pick(q, ["options"])) ? pick(q, ["options"]) : [];
+    return {
+      questionNo: Number(pick(q, ["questionNo", "questionNumber"])),
+      chapter: decodeEscapes(pick(q, ["chapter", "chapterName"], "")),
+      q: decodeEscapes(pick(q, ["question", "questionText"], "")),
+      opts: options.map(o => decodeEscapes(pick(o, ["option", "optionText"], ""))),
+      optionNos: options.map(o => Number(pick(o, ["optionNo", "optionNumber"]))),
+      correctOptions: options.map(o => isYes(pick(o, ["correct", "isCorrect"]))),
+      note: decodeEscapes(pick(q, ["note", "notes"], "")),
+      attemptNo: Number(pick(q, ["attemptNo", "attempt"], 0)) || null
+    };
+  });
+
   const e = Object.assign({}, navEmployee, json.employee || {});
+  const attemptNo = Number(json.attemptNo) ||
+    Number(dataObject.attemptNo) ||
+    (questions.find(q => q.attemptNo) || {}).attemptNo ||
+    null;
+
+  // Every question uses the attempt number NAV gave; fill any gaps from it.
+  questions.forEach(q => { if(!q.attemptNo) q.attemptNo = attemptNo; });
+
   return {
     questions,
-    attemptNo: Number(json.attemptNo) || Number((rawQuestions[0] || {}).attemptNo) || null,
+    attemptNo,
     employee: {
-      name: String(e.fullName || e.full_name || e.name || "").trim(),
+      name: String(
+        e.fullName ||
+        e.full_name ||
+        e.name ||
+        [e.FirstName, e.MiddleName, e.LastName].filter(Boolean).join(" ")
+      ).trim(),
       employeeId: String(e.employeeId || e.employeeNo || e.EmployeeNumber || employeeId || "").trim(),
       entity: normalizeEntity(e.company || e.entity),
       department: String(e.dept || e.department || e.Department || e.departmentName || e["Department Name"] || "").trim()
@@ -626,13 +683,13 @@ async function boot(){
       state.employeeId = details.employeeId;
       state.department = details.department;
       state.entity = details.entity;
-      showToast(`Welcome, ${details.name}! Your details have been successfully been fetched. Kindly confirm your details before proceeding with the training.`, "success");
+      showToast(`Welcome, ${details.name}! Your details have been successfully fetched. Kindly confirm your details before proceeding with the training.`, "success");
     }
 
     // GetTrainingQuestions is keyed by EmployeeNumber and returns the
     // authoritative employee details, including entity and department.
     if(state.employeeId){
-      const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
+      const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity);
       state.questions = questions;
       state.attemptNo = attemptNo;
       if(employee){
@@ -726,7 +783,7 @@ function renderIntro(){
         startBtn.disabled = true;
         startBtn.textContent = "Loading questions…";
         try{
-          const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
+          const { questions, employee, attemptNo } = await fetchITQuestions(state.employeeId, state.entity);
           state.questions = questions;
           state.attemptNo = attemptNo;
           if(employee){
@@ -761,7 +818,7 @@ function allChaptersViewed(){
 // questions fetch; once it has been used (a retake) the questions are
 // re-fetched so NAV hands back a fresh attempt. Shared by "Continue to
 // knowledge check" and both retake buttons, since a retake is a new attempt
-// per Rule 5 (a completed attempt is never modified in place).
+// (a completed attempt is never modified in place).
 async function startAttemptAndGoToQuiz(triggerBtn, errEl){
   const originalText = triggerBtn.textContent;
   triggerBtn.disabled = true;
@@ -769,11 +826,12 @@ async function startAttemptAndGoToQuiz(triggerBtn, errEl){
   if(errEl) errEl.style.display = "none";
   try{
     if(!state.attemptNo || state.attemptUsed){
-      const fresh = await fetchITQuestions(state.employeeId, state.entity, TRAINING_CODE);
+      const fresh = await fetchITQuestions(state.employeeId, state.entity);
       state.questions = fresh.questions;
       state.attemptNo = fresh.attemptNo;
     }
     if(!state.attemptNo) throw new Error("NAV did not return an attempt number. Please notify IT.");
+    if(!state.questions.length) throw new Error("No knowledge check questions were returned. Please notify IT.");
     state.attemptUsed = true;
     state.attemptCount += 1;
     state.screen = "quiz"; state.qIndex = 0; state.pendingSubmissions = []; state.showFeedback = false;
@@ -850,6 +908,12 @@ function renderQuiz(){
   const q = questions[state.qIndex];
   const qIndexAtRender = state.qIndex;
   const pct = Math.round((state.qIndex / questions.length) * 100);
+  // Use the attempt number NAV put on this question, falling back to the
+  // attempt's overall number.
+  const attemptForQuestion = q.attemptNo || state.attemptNo;
+  // If NAV sent no "correct" flag for any option, we can't say right or
+  // wrong -- show the note neutrally rather than marking everyone wrong.
+  const hasCorrectFlags = q.correctOptions.some(v => v === true);
   app.innerHTML = `
     <div class="progress-label">Step 2 of 2 &mdash; Question ${state.qIndex + 1} of ${questions.length}</div>
     <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
@@ -868,22 +932,30 @@ function renderQuiz(){
 
   // Shows right/wrong styling and the note immediately, using the
   // "correct" flags NAV sent with the question (no server round-trip needed).
-  //  - Picked wrong: picked option red (X), right option green (check), "Not quite. <note>"
+  //  - Picked wrong: picked option red (X), right option green (check), "Not Quite. <note>"
   //  - Picked right: picked option green (check), "Correct. <note>"
+  //  - No correct flags from NAV: picked option highlighted, note only
   function showFeedback(i){
     const chosenIsCorrect = q.correctOptions[i] === true;
     [...optsEl.children].forEach((el, j) => {
       const isRight = q.correctOptions[j] === true;
       el.disabled = true;
       el.classList.remove("selected");
-      el.classList.toggle("correct", isRight);                // right answer always green
-      el.classList.toggle("incorrect", j === i && !isRight);  // wrong pick red
-      if(isRight) el.title = "Correct answer";
+      if(hasCorrectFlags){
+        el.classList.toggle("correct", isRight);                // right answer always green
+        el.classList.toggle("incorrect", j === i && !isRight);  // wrong pick red
+        if(isRight) el.title = "Correct answer";
+      }else if(j === i){
+        el.classList.add("selected");
+      }
     });
+    const noteText = escapeHtml(q.note || "");
+    let fbClass, lead;
+    if(!hasCorrectFlags){ fbClass = "neutral"; lead = "Answer recorded. "; }
+    else if(chosenIsCorrect){ fbClass = "good"; lead = "Correct. "; }
+    else { fbClass = "bad"; lead = "Not Quite. "; }
     fbEl.innerHTML = `
-      <div class="feedback ${chosenIsCorrect ? "good" : "bad"}">
-        ${chosenIsCorrect ? "Correct. " : "Not quite. "}${escapeHtml(q.note || "")}
-      </div>
+      <div class="feedback ${fbClass}">${lead}${noteText}</div>
       <div id="save-status" class="save-status"></div>`;
   }
 
@@ -899,7 +971,7 @@ function renderQuiz(){
     // landed in NAV before completing the attempt.
     const submission = DataAdapter.submitAnswer({
       empNumber: state.employeeId,
-      attemptNo: state.attemptNo,
+      attemptNo: attemptForQuestion,
       entity: state.entity,
       questionNumber: q.questionNo,
       selectedOption: q.optionNos[i]
@@ -976,8 +1048,8 @@ function renderResult(){
 
   // completeAttempt failed outright -- answers were recorded as the
   // employee went, but NAV never confirmed a final score. There is no
-  // honest local score to show (correctness is never sent to the browser),
-  // so this is a plain failure state rather than a fabricated result.
+  // honest local score to show, so this is a plain failure state rather
+  // than a fabricated result.
   if(!r){
     app.innerHTML = `
       <div class="cert flagged">

@@ -428,45 +428,58 @@ export const GlobalProvider = ({ children }) => {
     const details = Cookies.get("__details");
 
     if (details) {
-      dispatch({
-        type: "GET_USER_INFO",
-        payload: decryptData(details),
-      });
-    } else {
-      const info = tokenInfo();
-
-      loadingStatus(!state.isLoading ? true : false);
-
       try {
-        const config = {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: localStorage.LOGIN_INFO,
-          },
-        };
+        const decryptedDetails = decryptData(details);
 
-        const res = await axios.get(
-          `${baseURL}/user/info?username=${info.data.username}`,
-          config
-        );
-
-        if (!res.data.error) {
-          if (res.data.data === null) {
-            Swal.fire("Server unavailable. Try again later");
-          }
-
-          addCookie(encryptData(res.data.data), "__details");
-
+        if (decryptedDetails && typeof decryptedDetails === "object") {
           dispatch({
             type: "GET_USER_INFO",
-            payload: res.data.data,
+            payload: decryptedDetails,
           });
+          return;
         }
       } catch (error) {
-        if (axios.isCancel(error)) return;
-      } finally {
-        loadingStatus(false);
+        // The cached cookie may have been written with a different secret or
+        // may be corrupted. Drop it and fall through to the live API instead
+        // of leaving user_info empty (which blanks the greeting and the
+        // avatar dropdown name).
+        Cookies.remove("__details");
       }
+    }
+
+    const info = tokenInfo();
+
+    if (!info || !info.data || !info.data.username) return;
+
+    loadingStatus(!state.isLoading ? true : false);
+
+    try {
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: localStorage.LOGIN_INFO,
+        },
+      };
+
+      const res = await axios.get(
+        `${baseURL}/user/info?username=${info.data.username}`,
+        config
+      );
+
+      if (!res.data.error && res.data.data) {
+        addCookie(encryptData(res.data.data), "__details");
+
+        dispatch({
+          type: "GET_USER_INFO",
+          payload: res.data.data,
+        });
+      } else if (res.data.data === null) {
+        Swal.fire("Server unavailable. Try again later");
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) return;
+    } finally {
+      loadingStatus(false);
     }
   }
 

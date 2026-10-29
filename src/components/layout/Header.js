@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useContext } from "react";
 import { Inbox, User, LogOut, Users, HelpCircle } from "react-feather";
 import { Link } from "react-router-dom";
 import { GlobalContext } from "../../context/GlobalState";
+import { getEmployeeName } from "../../utils/helpers";
 import logo from "../../images/logos/logo.png";
 import user_profile from "../../images/user.png";
 // import user from "../../images/user.jpg";
@@ -84,49 +85,10 @@ const Header = () => {
       "https://portal.micglobalrisks.com:8081/documents/defaults/user.png";
   };
 
-  const employeeName = (() => {
-    const sources = [user_info, user_info_to_update]
-      .filter(Boolean)
-      .reduce((values, source) => {
-        const nestedSource =
-          source.data && typeof source.data === "object" ? source.data : source;
-        return values.concat(nestedSource);
-      }, []);
-
-    const readValue = (keys) => {
-      for (const source of sources) {
-        for (const key of keys) {
-          if (source[key]) return String(source[key]).trim();
-        }
-      }
-      return "";
-    };
-
-    const fullName = readValue([
-      "FullName",
-      "fullName",
-      "full_name",
-      "Full Name",
-      "EmployeeName",
-      "employeeName",
-      "employee_name",
-      "Employee Name",
-      "displayName",
-      "Name",
-      "name",
-    ]);
-
-    if (fullName) return fullName;
-
-    return [
-      readValue(["FirstName", "firstName", "first_name"]),
-      readValue(["MiddleName", "middleName", "middle_name"]),
-      readValue(["LastName", "lastName", "last_name"]),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-  })();
+  const employeeName =
+    getEmployeeName(user_info, user_info_to_update) ||
+    (globals && globals.username) ||
+    "";
 
   useEffect(() => {
     getUserDetails();

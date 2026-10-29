@@ -4,6 +4,7 @@ import BreadCrumb from "../components/sections/BreadCrumb";
 import Modules from "../components/sections/Modules";
 import { User } from "react-feather";
 import { GlobalContext } from "../context/GlobalState";
+import { getEmployeeName } from "../utils/helpers";
 import Header from "../components/layout/Header";
 import ChristmasBanner from "../components/additions/ChristmasBanner";
 
@@ -48,10 +49,15 @@ const Dashboard = () => {
     return day;
   };
 
+  const firstName =
+    user_info.FirstName ||
+    user_info.firstName ||
+    user_info.first_name ||
+    getEmployeeName(user_info).split(" ")[0] ||
+    "";
+
   const menu = {
-    title: user_info.FirstName
-      ? greetingText() + ", " + user_info.FirstName
-      : greetingText() + "user",
+    title: greetingText() + (firstName ? ", " + firstName : ""),
     subTitle: "Today is " + dayName() + ", " + todayDate(),
     links: [
       // {

@@ -43,20 +43,74 @@ export const swapSlashes = (str, char) => {
   }
 };
 
+// This recovered source tree has no .env, so REACT_APP_SECRET is undefined
+// at runtime. The production portal encrypted its cookies with "kimiko", so
+// fall back to that same secret (mirrors jwtSecret in GlobalState.js).
+const storageSecret = () => process.env.REACT_APP_SECRET || "kimiko";
+
 export const encryptData = (data) => {
   const ciphertext = CryptoJS.AES.encrypt(
     JSON.stringify(data),
-    process.env.REACT_APP_SECRET
+    storageSecret()
   ).toString();
 
   return ciphertext;
 };
 
 export const decryptData = (ciphertext) => {
-  var bytes = CryptoJS.AES.decrypt(ciphertext, process.env.REACT_APP_SECRET);
+  var bytes = CryptoJS.AES.decrypt(ciphertext, storageSecret());
   var decryptedData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
 
   return decryptedData;
+};
+
+// Resolves a display name from any of the profile objects the portal keeps
+// (user_info, user_info_to_update, NAV employee headers, etc.). Different
+// endpoints use different casing / casing conventions, and some wrap the
+// real object in `data`.
+export const getEmployeeName = (...sources) => {
+  const values = [];
+
+  sources.filter(Boolean).forEach((source) => {
+    if (source.data && typeof source.data === "object") values.push(source.data);
+    values.push(source);
+  });
+
+  const readValue = (keys) => {
+    for (const source of values) {
+      for (const key of keys) {
+        const value = source[key];
+        if (value !== undefined && value !== null && String(value).trim()) {
+          return String(value).trim();
+        }
+      }
+    }
+    return "";
+  };
+
+  const fullName = readValue([
+    "FullName",
+    "fullName",
+    "full_name",
+    "Full Name",
+    "EmployeeName",
+    "employeeName",
+    "employee_name",
+    "Employee Name",
+    "Name",
+    "name",
+  ]);
+
+  if (fullName) return fullName;
+
+  return [
+    readValue(["FirstName", "firstName", "first_name"]),
+    readValue(["MiddleName", "middleName", "middle_name"]),
+    readValue(["LastName", "lastName", "last_name"]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 };
 
 export const position = ["Manager", "Employee", "Team Leader"];
