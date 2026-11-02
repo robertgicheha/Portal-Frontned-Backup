@@ -143,6 +143,44 @@
   .chap-body.open{display:block;padding-top:14px;}
   .chap-timer{font-size:11.5px;color:var(--muted);margin-top:10px;font-style:italic;}
   .chap-summary{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  /* Thank-you screen */
+  body.ty-mode .wrap{max-width:920px;}
+  body.ty-mode .brand{display:none;}
+  body.ty-mode .card{padding:0;border:none;background:transparent;box-shadow:none;}
+  .ty-card{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(15,23,42,.10);text-align:left;}
+  .ty-left{padding:40px 38px;display:flex;flex-direction:column;gap:18px;}
+  .ty-logo{display:block;}
+  .ty-logo img{display:block;width:100%;max-width:240px;height:auto;}
+  .ty-eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);}
+  .ty-h2{font-size:30px;font-weight:800;color:var(--navy);margin:0;line-height:1.15;}
+  .ty-p{font-size:14px;color:var(--muted);margin:0;line-height:1.6;}
+  .ty-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .ty-stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+  .ty-stat .k{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .ty-stat .v{font-size:17px;font-weight:800;color:var(--navy);line-height:1.2;}
+  .ty-stat .v small{font-size:12px;font-weight:600;color:var(--muted);}
+  .ty-date{font-size:12px;color:var(--muted);background:#fff;padding:12px 16px;border-radius:12px;border:1px solid var(--line);align-self:flex-start;}
+  .ty-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
+  .ty-btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:background .15s,border-color .15s,color .15s;}
+  .ty-solid{background:var(--navy);color:#fff;}
+  .ty-solid:hover{background:var(--navy-light);}
+  .ty-ghost{background:#fff;color:var(--navy);border-color:var(--line);}
+  .ty-ghost:hover{background:var(--bg);}
+  .ty-exit{background:transparent;color:var(--muted);border-color:transparent;}
+  .ty-exit:hover{color:var(--flag);background:var(--flag-bg);}
+  .ty-art{position:relative;min-height:100%;background:linear-gradient(160deg,var(--navy),var(--navy-light));display:flex;align-items:center;justify-content:center;padding:28px;overflow:hidden;}
+  .ty-ring{position:absolute;width:260px;height:260px;border-radius:50%;border:40px solid rgba(255,255,255,.08);top:-60px;right:-60px;}
+  .ty-photo{position:relative;width:100%;max-width:340px;aspect-ratio:3/2;border-radius:16px;overflow:hidden;background:rgba(255,255,255,.12);box-shadow:0 18px 40px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;}
+  .ty-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .ty-photo.no-img::after{content:"\2713";font-size:56px;font-weight:800;color:rgba(255,255,255,.9);}
+  @media (max-width:720px){
+    .ty-card{grid-template-columns:1fr;}
+    .ty-art{min-height:200px;order:-1;}
+    .ty-photo{max-width:100%;aspect-ratio:3/2;}
+    .ty-left{padding:28px 22px;}
+    .ty-h2{font-size:24px;}
+  }
 </style>
 </head>
 <body>
@@ -258,7 +296,7 @@ const PORTAL_API_BASE = "https://portal.micglobalrisks.com:8082/portal/v1.0/api"
 // Note: a secret in browser JavaScript is readable by anyone who can load
 // this page, so it only keeps out callers who never opened the page. Real
 // protection needs the middleware to accept the portal's session bearer.
-const IT_POLICY_AWARENESS_SECRET = "REPLACE_WITH_NEW_SECRET";
+const IT_POLICY_AWARENESS_SECRET = "lp!tP:H0TwN)wB9v";
 
 function policyAwarenessHeaders(extra){
   return Object.assign({ "X-Internal-Token": IT_POLICY_AWARENESS_SECRET }, extra || {});
@@ -320,7 +358,7 @@ const DataAdapter = {
   // submitQuestions(empNumber, attemptNo), which finalises the attempt from
   // the answers NAV already received one by one -- the score is NAV's, never
   // computed client-side.
-  async completeAttempt({ empNumber, attemptNo, entity }){
+  async completeAttempt({ empNumber, attemptNo, entity, name, department, chaptersViewed, chaptersTotal, timeTakenSeconds }){
     const res = await fetch(`${API_BASE}/final_it_submit`, {
       method: "POST",
       headers: policyAwarenessHeaders({ "Content-Type": "application/json" }),
@@ -328,7 +366,14 @@ const DataAdapter = {
         token: IT_POLICY_AWARENESS_SECRET,
         empNumber,
         attemptNo: Number(attemptNo),
-        entity
+        entity,
+        // Descriptive fields are for the org-wide completion log written by
+        // final_it_submit.php; NAV remains the source of the score/pass mark.
+        name: name || "",
+        department: department || "",
+        chaptersViewed: Number(chaptersViewed) || 0,
+        chaptersTotal: Number(chaptersTotal) || 0,
+        timeTakenSeconds: timeTakenSeconds == null ? null : Number(timeTakenSeconds)
       })
     });
     const json = await res.json();
@@ -336,17 +381,29 @@ const DataAdapter = {
     return json; // { status, attemptNo, totalQuestions, correctAnswers, score, passed, completed, completedDate }
   },
 
-  // No completion endpoint is available in this backend. Completion is
-  // acknowledged by final_it_submit.
+  // GET /api/it_policy_awareness/log.php
+  // Admin-only org-wide completion log. The shared token identifies this
+  // module; the portal JWT proves the caller is an administrator (role 1).
   async listRecords(){
-    throw new Error("The completion log is not available in this backend.");
+    const res = await fetch(`${API_BASE}/log.php`, {
+      method: "GET",
+      headers: Object.assign(policyAwarenessHeaders(), portalAuthHeaders())
+    });
+    const json = await res.json().catch(() => ({}));
+    if(res.status === 401 || res.status === 403){
+      throw new Error(json.message || "Only administrators can view the completion log.");
+    }
+    if(!res.ok || (json.status && json.status !== "success") || json.error){
+      throw new Error(json.message || "Could not load the completion log.");
+    }
+    return json.records || json.data || [];
   }
 };
 /* ======================== END DATA ADAPTER SECTION ======================== */
 
-// Hides the "view completion log" entry points until DataAdapter.listRecords
-// has a real backend (see the comment on that method above).
-const COMPLETION_LOG_AVAILABLE = false;
+// The completion log is org-wide, so it is only offered to portal
+// administrators (JWT data.role === 1). The backend enforces the same rule.
+let COMPLETION_LOG_AVAILABLE = false;
 
 // Toast notification system
 function initToastContainer(){
@@ -621,6 +678,21 @@ function resolveUsername(){
   return "";
 }
 
+// The portal's JWT carries data.role; role 1 is an administrator. The
+// completion log is org-wide, so its entry point is only shown to admins --
+// the backend re-checks the same JWT before returning any records.
+function resolveRole(){
+  try{
+    const parts = (localStorage.getItem("LOGIN_INFO") || "").split(".");
+    if(parts.length === 3){
+      const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(atob(b64 + "=".repeat((4 - b64.length % 4) % 4)));
+      return payload && payload.data ? Number(payload.data.role) : null;
+    }
+  }catch(e){ console.error("[it-policy] could not read LOGIN_INFO role:", e); }
+  return null;
+}
+
 function getUrlParams(){
   const p = new URLSearchParams(window.location.search);
   const rawEntity = p.get("entity") || "";
@@ -640,8 +712,9 @@ let state = {
   questions: [],
   chapterStatus: {},     // id -> {opened, viewed, openedAt}
   openChapterId: null,
-  qIndex: 0, pendingSubmissions: [], showFeedback: false,
+  qIndex: 0, pendingSubmissions: [], showFeedback: false, answers: {},
   attemptNo: null, attemptUsed: false, attemptCount: 0,
+  startedAt: null,
   priorCompletion: null,
   logFilter: ""
 };
@@ -649,6 +722,7 @@ CHAPTERS.forEach(c => state.chapterStatus[c.id] = { viewed: false, timer: null }
 
 const app = document.getElementById("app");
 function render(){
+  document.body.classList.toggle("ty-mode", state.screen === "thanks");
   if(state.screen === "loading") return renderLoading();
   if(state.screen === "intro") return renderIntro();
   if(state.screen === "chapters") return renderChapters();
@@ -670,6 +744,7 @@ function renderLoading(){
 // fetches this attempt's questions up front. A legacy username fallback is
 // retained for direct links created by older portal builds.
 async function boot(){
+  COMPLETION_LOG_AVAILABLE = resolveRole() === 1;
   const params = getUrlParams();
   state.name = params.name;
   state.employeeId = params.employeeId;
@@ -802,6 +877,7 @@ function renderIntro(){
           return;
         }
       }
+      state.startedAt = Date.now();
       state.screen = "chapters";
       render();
     });
@@ -832,9 +908,12 @@ async function startAttemptAndGoToQuiz(triggerBtn, errEl){
     }
     if(!state.attemptNo) throw new Error("NAV did not return an attempt number. Please notify IT.");
     if(!state.questions.length) throw new Error("No knowledge check questions were returned. Please notify IT.");
+    // A retake starts a fresh timer; the first attempt is timed from the
+    // moment the employee entered the chapter review.
+    if(state.attemptCount > 0) state.startedAt = Date.now();
     state.attemptUsed = true;
     state.attemptCount += 1;
-    state.screen = "quiz"; state.qIndex = 0; state.pendingSubmissions = []; state.showFeedback = false;
+    state.screen = "quiz"; state.qIndex = 0; state.pendingSubmissions = []; state.showFeedback = false; state.answers = {};
     render();
   }catch(e){
     triggerBtn.disabled = false;
@@ -962,6 +1041,7 @@ function renderQuiz(){
   // Sends the chosen answer to NAV. The answer is locked in, so a failure
   // offers Retry for the SAME option rather than letting them re-pick.
   async function saveAnswer(i){
+    state.answers[q.questionNo] = i;
     const status = document.getElementById("save-status");
     status.className = "save-status";
     status.textContent = "Saving your answer…";
@@ -983,7 +1063,7 @@ function renderQuiz(){
     const statusNow = document.getElementById("save-status");
     if(!statusNow) return;
     if(res.ok){
-      statusNow.textContent = "Answer saved.";
+      statusNow.textContent = "";
       nextBtn.disabled = false;
     }else{
       statusNow.className = "save-status err";
@@ -1016,20 +1096,34 @@ function renderQuiz(){
 }
 
 async function finishQuiz(){
+  const localTotal = state.questions.length;
+  const localCorrect = state.questions.reduce((n, q) => {
+    const picked = state.answers[q.questionNo];
+    return n + (picked != null && q.correctOptions && q.correctOptions[picked] === true ? 1 : 0);
+  }, 0);
   const base = {
     name: state.name, employeeId: state.employeeId, department: state.department, entity: state.entity,
-    chaptersViewed: CHAPTERS.length, chaptersTotal: CHAPTERS.length,
-    attemptNo: state.attemptNo, attemptCount: state.attemptCount
+    chaptersViewed: CHAPTERS.filter(c => state.chapterStatus[c.id].viewed).length,
+    chaptersTotal: CHAPTERS.length,
+    attemptNo: state.attemptNo, attemptCount: state.attemptCount,
+    timeTakenSeconds: state.startedAt ? Math.max(0, Math.round((Date.now() - state.startedAt) / 1000)) : null
   };
 
   state.saveError = null;
   try{
     await Promise.allSettled(state.pendingSubmissions);
-    const result = await DataAdapter.completeAttempt({ empNumber: state.employeeId, attemptNo: state.attemptNo, entity: state.entity });
+    const result = await DataAdapter.completeAttempt({
+      empNumber: state.employeeId, attemptNo: state.attemptNo, entity: state.entity,
+      name: base.name, department: base.department,
+      chaptersViewed: base.chaptersViewed, chaptersTotal: base.chaptersTotal,
+      timeTakenSeconds: base.timeTakenSeconds
+    });
+    const navTotal = Number(result.totalQuestions);
+    const navScore = Number(result.correctAnswers);
     state.lastRecord = Object.assign({}, base, {
       attemptNo: result.attemptNo || state.attemptNo,
-      score: result.correctAnswers,
-      total: result.totalQuestions,
+      score: navTotal > 0 ? navScore : localCorrect,
+      total: navTotal > 0 ? navTotal : localTotal,
       passed: result.passed,
       completedDate: result.completedDate || new Date().toISOString()
     });
@@ -1119,26 +1213,60 @@ function renderResult(){
   if(logBtn) logBtn.onclick = () => { state.screen = "log"; render(); };
 }
 
+function formatDuration(totalSeconds){
+  if(totalSeconds == null || !isFinite(totalSeconds) || totalSeconds < 0) return "—";
+  const s = Math.round(totalSeconds);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  if(m >= 60){
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${h}h ${mm}m`;
+  }
+  return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
+}
+
 function renderThankYou(){
   const r = state.lastRecord || {};
+  const firstName = r.name ? String(r.name).trim().split(/\s+/)[0] : "";
+  const chaptersViewed = r.chaptersViewed ?? CHAPTERS.filter(c => state.chapterStatus[c.id].viewed).length;
+  const chaptersTotal = r.chaptersTotal ?? CHAPTERS.length;
+  const total = Number(r.total || 0);
+  const score = Number(r.score || 0);
+  const pct = total > 0 ? Math.round((score / total) * 100) : null;
+  const attemptNo = r.attemptNo || state.attemptNo || "—";
+  const timeTaken = formatDuration(r.timeTakenSeconds);
+  const submitted = new Date(r.completedDate || Date.now()).toLocaleString();
+
   app.innerHTML = `
-    <div class="cert">
-      <div class="stamp">&#10003;</div>
-      <h1>Thank you${r.name ? `, ${escapeHtml(r.name.split(" ")[0])}` : ""}!</h1>
-      <p class="sub">Your IT Policy Awareness quiz has been completed and submitted to NAV.</p>
-      <div class="meta-box">
-        <div><b>Employee ID:</b> ${escapeHtml(r.employeeId || state.employeeId)}</div>
-        <div><b>Entity:</b> ${escapeHtml(r.entity || state.entity || "—")}</div>
-        <div><b>Department:</b> ${escapeHtml(r.department || state.department || "—")}</div>
-        <div><b>Submitted:</b> ${new Date(r.completedDate || Date.now()).toLocaleString()}</div>
+    <div class="ty-card">
+      <div class="ty-left">
+        <span class="ty-logo"><img src="/logo.png" alt="Executive Healthcare Solutions and MIC Global Risks" onerror="this.parentNode.style.display='none'"></span>
+        <span class="ty-eyebrow">Your IT Policy Awareness quiz has been submitted.</span>
+        <h2 class="ty-h2">Thank you${firstName ? `, ${escapeHtml(firstName)}` : ""}!</h2>
+        <p class="ty-p">Your responses have been successfully submitted to NAV and your completion has been recorded. Your results are held in strict confidence.</p>
+        <div class="ty-stats">
+          <div class="ty-stat"><span class="k">Chapters reviewed</span><span class="v">${chaptersViewed}/${chaptersTotal}</span></div>
+          <div class="ty-stat"><span class="k">Quiz score</span><span class="v">${total > 0 ? `${score}/${total} <small>(${pct}%)</small>` : "—"}</span></div>
+          <div class="ty-stat"><span class="k">Attempt No</span><span class="v">${escapeHtml(String(attemptNo))}</span></div>
+          <div class="ty-stat"><span class="k">Time taken</span><span class="v">${escapeHtml(timeTaken)}</span></div>
+        </div>
+        <div class="ty-date" id="svDate">Submitted ${escapeHtml(submitted)}</div>
+        <div class="ty-actions">
+          <a class="ty-btn ty-solid" href="/">Return to dashboard</a>
+          <a class="ty-btn ty-ghost" href="/resources-and-forms">Back to Resources</a>
+          ${COMPLETION_LOG_AVAILABLE ? `<button type="button" class="ty-btn ty-exit" id="log-btn">View completion log</button>` : ""}
+          <button type="button" class="ty-btn ty-exit" id="retake-quiz-btn">Retake quiz</button>
+        </div>
       </div>
-      <div class="row-btns" style="justify-content:center;gap:12px;flex-wrap:wrap;">
-        <button class="btn" id="retake-quiz-btn">Retake quiz</button>
-        <a class="btn secondary" href="/">Return to dashboard</a>
-        <a class="btn secondary" href="/resources-and-forms">Back to Resources</a>
+      <div class="ty-art">
+        <span class="ty-ring"></span>
+        <div class="ty-photo"><img src="/media/Thank-you.webp" alt="Thank you" onerror="this.parentNode.classList.add('no-img');this.remove();"></div>
       </div>
     </div>
   `;
+  const logBtn = document.getElementById("log-btn");
+  if(logBtn) logBtn.onclick = () => { state.screen = "log"; render(); };
   document.getElementById("retake-quiz-btn").onclick = async (event) => {
     await startAttemptAndGoToQuiz(event.target, null);
   };
@@ -1163,10 +1291,12 @@ async function renderLog(){
   document.getElementById("entity-filter").onchange = (e) => { state.logFilter = e.target.value; render(); };
   try{
     let records = await DataAdapter.listRecords();
+    const logBody = document.getElementById("log-body");
+    if(!logBody) return;
     records.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-    if(records.length === 0){ document.getElementById("log-body").textContent = "No completions recorded yet."; return; }
+    if(records.length === 0){ logBody.textContent = "No completions recorded yet."; return; }
     if(state.logFilter){ records = records.filter(r => r.entity === state.logFilter); }
-    if(records.length === 0){ document.getElementById("log-body").textContent = "No completions recorded for this filter yet."; return; }
+    if(records.length === 0){ logBody.textContent = "No completions recorded for this filter yet."; return; }
     const rows = records.map(r => `
       <tr>
         <td>${escapeHtml(r.name)}</td>
@@ -1179,11 +1309,12 @@ async function renderLog(){
         <td>${new Date(r.timestamp).toLocaleDateString()}</td>
       </tr>
     `).join("");
-    document.getElementById("log-body").outerHTML = `
+    logBody.outerHTML = `
       <table><thead><tr><th>Name</th><th>ID</th><th>Entity</th><th>Dept</th><th>Chapters</th><th>Quiz</th><th>Status</th><th>Date</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
   }catch(e){
-    document.getElementById("log-body").textContent = "Could not load the completion log right now.";
+    const el = document.getElementById("log-body");
+    if(el) el.textContent = friendlyError(e, "Could not load the completion log right now.");
   }
 }
 
@@ -1202,4 +1333,4 @@ render();
 boot();
 </script>
 </body>
-</html>
+</html>ml>
