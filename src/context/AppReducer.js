@@ -70,7 +70,13 @@ const AppReducer = (state, action) => {
     case "GET_LEAVE_INFO":
       return {
         ...state,
-        leave_info: action.payload,
+        // The profile page reads fields straight off this object, so a null /
+        // non-object payload (e.g. no leave record for an EHS employee) must
+        // never replace it -- that crashed the page.
+        leave_info:
+          action.payload && typeof action.payload === "object"
+            ? action.payload
+            : {},
       };
     case "GET_LEAVE_HISTORY":
       return {
@@ -100,12 +106,24 @@ const AppReducer = (state, action) => {
     case "GET_USER_INFO":
       return {
         ...state,
-        user_info: action.payload,
+        // The profile page reads fields straight off this object, so a null /
+        // non-object payload (e.g. no leave record for an EHS employee) must
+        // never replace it -- that crashed the page.
+        user_info:
+          action.payload && typeof action.payload === "object"
+            ? action.payload
+            : {},
       };
     case "GET_USER_INFO_TO_UPDATE":
       return {
         ...state,
-        user_info_to_update: action.payload,
+        // The profile page reads fields straight off this object, so a null /
+        // non-object payload (e.g. no leave record for an EHS employee) must
+        // never replace it -- that crashed the page.
+        user_info_to_update:
+          action.payload && typeof action.payload === "object"
+            ? action.payload
+            : {},
       };
 
     case "SET_PRIVILEGE":

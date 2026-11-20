@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>EHS/MIC Policy Awareness Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --navy:#002060;
@@ -145,47 +148,52 @@
   .chap-summary{font-size:12px;color:var(--muted);margin-top:2px;}
 
   /* Thank-you screen */
-  body.ty-mode .wrap{max-width:920px;}
+  body.ty-mode .wrap{max-width:1100px;}
   body.ty-mode .brand{display:none;}
   body.ty-mode .card{padding:0;border:none;background:transparent;box-shadow:none;}
-  .ty-card{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(15,23,42,.10);text-align:left;}
-  .ty-left{padding:40px 38px;display:flex;flex-direction:column;gap:18px;}
-  .ty-logo{display:block;}
-  .ty-logo img{display:block;width:100%;max-width:240px;height:auto;}
-  .ty-eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);}
-  .ty-h2{font-size:30px;font-weight:800;color:var(--navy);margin:0;line-height:1.15;}
-  .ty-p{font-size:14px;color:var(--muted);margin:0;line-height:1.6;}
-  .ty-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-  .ty-stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
-  .ty-stat .k{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
-  .ty-stat .v{font-size:17px;font-weight:800;color:var(--navy);line-height:1.2;}
-  .ty-stat .v small{font-size:12px;font-weight:600;color:var(--muted);}
-  .ty-date{font-size:12px;color:var(--muted);background:#fff;padding:12px 16px;border-radius:12px;border:1px solid var(--line);align-self:flex-start;}
-  .ty-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
-  .ty-btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:background .15s,border-color .15s,color .15s;}
-  .ty-solid{background:var(--navy);color:#fff;}
-  .ty-solid:hover{background:var(--navy-light);}
-  .ty-ghost{background:#fff;color:var(--navy);border-color:var(--line);}
-  .ty-ghost:hover{background:var(--bg);}
-  .ty-exit{background:transparent;color:var(--muted);border-color:transparent;}
-  .ty-exit:hover{color:var(--flag);background:var(--flag-bg);}
-  .ty-art{position:relative;min-height:100%;background:linear-gradient(160deg,var(--navy),var(--navy-light));display:flex;align-items:center;justify-content:center;padding:28px;overflow:hidden;}
-  .ty-ring{position:absolute;width:260px;height:260px;border-radius:50%;border:40px solid rgba(255,255,255,.08);top:-60px;right:-60px;}
-  .ty-photo{position:relative;width:100%;max-width:340px;aspect-ratio:3/2;border-radius:16px;overflow:hidden;background:rgba(255,255,255,.12);box-shadow:0 18px 40px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;}
+  .ty-card{position:relative;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);align-items:center;gap:24px;min-height:560px;padding:56px 64px;border-radius:28px;overflow:hidden;text-align:left;color:#fff;font-family:'Montserrat','Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 12% 88%,rgba(86,128,196,.55) 0,rgba(86,128,196,0) 42%),radial-gradient(circle at 78% 18%,rgba(24,118,170,.65) 0,rgba(24,118,170,0) 48%),linear-gradient(135deg,#1e2a5e 0%,#22448a 55%,#1f3474 100%);
+    box-shadow:0 24px 60px rgba(15,23,42,.22);}
+  .ty-card::before{content:"";position:absolute;width:260px;height:260px;border-radius:50%;border:40px solid rgba(255,255,255,.07);top:-90px;right:-50px;pointer-events:none;}
+  .ty-left{position:relative;z-index:1;display:flex;flex-direction:column;gap:16px;}
+  .ty-logo{display:inline-flex;align-self:flex-start;background:#fff;border-radius:12px;padding:10px 16px;box-shadow:0 6px 18px rgba(0,0,0,.18);}
+  .ty-logo img{display:block;width:auto;height:40px;max-width:100%;}
+  .ty-eyebrow{font-size:14px;font-weight:500;color:#5fd4f4;margin-top:16px;}
+  .ty-h2{font-size:52px;font-weight:800;color:#fff;margin:0;line-height:1.08;letter-spacing:-.02em;}
+  .ty-p{font-size:15px;color:rgba(255,255,255,.88);margin:0;line-height:1.7;max-width:520px;}
+  .ty-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-width:520px;}
+  .ty-stat{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:12px 16px;backdrop-filter:blur(4px);}
+  .ty-stat .k{display:block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:4px;}
+  .ty-stat .v{font-size:19px;font-weight:800;color:#fff;line-height:1.2;}
+  .ty-stat .v small{font-size:12px;font-weight:600;color:rgba(255,255,255,.75);}
+  .ty-date{font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.3);align-self:flex-start;}
+  .ty-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;}
+  .ty-btn{display:inline-flex;align-items:center;justify-content:center;padding:13px 22px;border-radius:999px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:background .15s,border-color .15s,color .15s,transform .15s;}
+  .ty-btn:hover{transform:translateY(-1px);}
+  .ty-solid{background:linear-gradient(90deg,#7fdcef,#1fb3d6);color:#14244f;}
+  .ty-solid:hover{background:linear-gradient(90deg,#95e4f3,#36c0e0);}
+  .ty-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.75);}
+  .ty-ghost:hover{background:rgba(255,255,255,.1);}
+  .ty-exit{background:rgba(255,255,255,.14);color:#fff;border-color:rgba(255,255,255,.3);}
+  .ty-exit:hover{background:rgba(255,255,255,.24);}
+  .ty-art{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .ty-ring{position:absolute;width:420px;height:420px;max-width:100%;aspect-ratio:1;border-radius:50%;border:7px solid transparent;border-top-color:#16a6c9;border-left-color:#16a6c9;transform:rotate(-20deg);pointer-events:none;}
+  .ty-photo{position:relative;width:380px;max-width:90%;aspect-ratio:1;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.12);border:8px solid #fff;box-shadow:0 18px 40px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;}
   .ty-photo img{width:100%;height:100%;object-fit:cover;display:block;}
-  .ty-photo.no-img::after{content:"\2713";font-size:56px;font-weight:800;color:rgba(255,255,255,.9);}
-  @media (max-width:720px){
-    .ty-card{grid-template-columns:1fr;}
-    .ty-art{min-height:200px;order:-1;}
-    .ty-photo{max-width:100%;aspect-ratio:3/2;}
-    .ty-left{padding:28px 22px;}
-    .ty-h2{font-size:24px;}
+  .ty-photo.no-img::after{content:"¹3";font-size:72px;font-weight:800;color:rgba(255,255,255,.9);}
+  @media (max-width:860px){
+    .ty-card{grid-template-columns:1fr;padding:32px 22px;min-height:0;border-radius:22px;}
+    .ty-art{order:-1;padding:8px 0 0;}
+    .ty-ring{width:250px;height:250px;}
+    .ty-photo{width:220px;border-width:6px;}
+    .ty-h2{font-size:34px;}
+    .ty-stats{grid-template-columns:repeat(2,minmax(0,1fr));}
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="brand"><img class="brand-logo" src="/logo.png" alt="Executive Healthcare Solutions and MIC Global Risks"/></div>
+  <div class="brand"><img class="brand-logo" src="/logos/ehs-mic-logo.png" alt="Executive Healthcare Solutions and MIC Global Risks"/></div>
   <div class="card" id="app"></div>
 </div>
 
@@ -344,7 +352,8 @@ const DataAdapter = {
         const json = await res.json();
         if(res.ok && json.status === "success"){
           // Keep NAV's latest result (score %, chapters, time taken, date) for the results screen
-          if(json.data && typeof json.data === "object") state.navResult = json.data;
+          const navData = extractNavData(json);
+          if(navData) state.navResult = navData;
           return { ok: true };
         }
         // A validation / NAV business rejection (4xx) won't improve on retry
@@ -1049,7 +1058,7 @@ function renderQuiz(){
     state.answers[q.questionNo] = i;
     const status = document.getElementById("save-status");
     status.className = "save-status";
-    status.textContent = "Saving your answer…";
+    status.textContent = "";
     nextBtn.disabled = true;
 
     // Track the promise so finishQuiz() can make sure every answer has
@@ -1126,7 +1135,7 @@ async function finishQuiz(){
     const navTotal = Number(result.totalQuestions);
     const navScore = Number(result.correctAnswers);
     // NAV's submit response: { scorepercentage, timeTaken, chapters, name, empID, entity, department, date }
-    const nav = (result && result.data && typeof result.data === "object") ? result.data : (state.navResult || result || {});
+    const nav = extractNavData(result) || state.navResult || {};
     state.lastRecord = Object.assign({}, base, {
       attemptNo: result.attemptNo || state.attemptNo,
       score: navTotal > 0 ? navScore : localCorrect,
@@ -1240,6 +1249,32 @@ function formatDuration(totalSeconds){
   return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
 }
 
+// Finds NAV's result block ({ scorepercentage, timeTaken, chapters, name, empID,
+// entity, department, date }) in a response, whether the middleware passes it as
+// an object under "data", at the top level, or still as NAV's raw JSON text.
+function extractNavData(value, depth){
+  depth = depth || 0;
+  if(value == null || depth > 4) return null;
+  if(typeof value === "string"){
+    if(value.indexOf("scorepercentage") === -1 && value.indexOf("timeTaken") === -1) return null;
+    const start = value.indexOf("{"), end = value.lastIndexOf("}");
+    if(start === -1 || end <= start) return null;
+    try{ return extractNavData(JSON.parse(value.slice(start, end + 1)), depth + 1); }catch(e){ return null; }
+  }
+  if(typeof value !== "object") return null;
+  if("scorepercentage" in value || "timeTaken" in value) return value;
+  if(value.data != null){
+    const fromData = extractNavData(value.data, depth + 1);
+    if(fromData) return fromData;
+  }
+  for(const k of Object.keys(value)){
+    if(k === "data") continue;
+    const found = extractNavData(value[k], depth + 1);
+    if(found) return found;
+  }
+  return null;
+}
+
 // NAV returns a .NET TimeSpan string, e.g. "20.20:08:48.2490000" (d.hh:mm:ss.fffffff).
 // Display it as-is in readable units; falls back to the raw string if it doesn't match.
 function formatNavTimeSpan(value){
@@ -1269,7 +1304,7 @@ function renderThankYou(){
   app.innerHTML = `
     <div class="ty-card">
       <div class="ty-left">
-        <span class="ty-logo"><img src="/logo.png" alt="Executive Healthcare Solutions and MIC Global Risks" onerror="this.parentNode.style.display='none'"></span>
+        <span class="ty-logo"><img src="/logos/ehs-mic-logo.png" alt="Executive Healthcare Solutions and MIC Global Risks" onerror="this.parentNode.style.display='none'"></span>
         <span class="ty-eyebrow">Your IT Policy Awareness quiz has been submitted.</span>
         <h2 class="ty-h2">Thank you${firstName ? `, ${escapeHtml(firstName)}` : ""}!</h2>
         <p class="ty-p">Your responses have been successfully submitted to NAV and your completion has been recorded. Your results are held in strict confidence.</p>
@@ -1361,4 +1396,4 @@ render();
 boot();
 </script>
 </body>
-</html>ml>
+</html>

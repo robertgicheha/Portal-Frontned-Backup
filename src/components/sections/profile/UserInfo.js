@@ -53,11 +53,17 @@ const GeneralInfo = ({
 
   const { more_option } = state;
 
+  // Load once on mount. Doing this on every isUpdatingProfile change re-fetched
+  // and re-toggled the flag in a loop, which made the page flicker.
   useEffect(() => {
     getQualifications();
 
     sectionUpdating(false);
 
+    // eslint-disable-next-line
+  }, []);
+
+  useEffect(() => {
     if (!isUpdatingProfile) {
       seteditCompany(false);
       seteditPersonal(false);

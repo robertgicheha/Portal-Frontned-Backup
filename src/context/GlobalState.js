@@ -381,10 +381,29 @@ export const GlobalProvider = ({ children }) => {
       payload: true,
     });
 
+    // A previously buffered "null" (or corrupt value) would otherwise be reused
+    // forever and never re-fetched -- drop it so the live API is called.
+    if (localStorage.hasOwnProperty("_buffer_user_info")) {
+      let buffered = null;
+      try {
+        buffered = JSON.parse(localStorage._buffer_user_info);
+      } catch (e) {
+        buffered = null;
+      }
+      if (!buffered || typeof buffered !== "object") {
+        localStorage.removeItem("_buffer_user_info");
+      }
+    }
+
     if (localStorage.hasOwnProperty("_buffer_user_info")) {
       dispatch({
         type: "GET_USER_INFO_TO_UPDATE",
         payload: JSON.parse(localStorage._buffer_user_info),
+      });
+
+      dispatch({
+        type: "SET_UPDATE_PROFILE",
+        payload: false,
       });
     } else {
       const info = tokenInfo();
@@ -402,7 +421,11 @@ export const GlobalProvider = ({ children }) => {
           config
         );
 
-        if (!res.data.error) {
+        if (
+          !res.data.error &&
+          res.data.data &&
+          typeof res.data.data === "object"
+        ) {
           dispatch({
             type: "GET_USER_INFO_TO_UPDATE",
             payload: res.data.data,
@@ -417,9 +440,18 @@ export const GlobalProvider = ({ children }) => {
             type: "SET_UPDATE_PROFILE",
             payload: false,
           });
+        } else {
+          dispatch({
+            type: "SET_UPDATE_PROFILE",
+            payload: false,
+          });
         }
       } catch (error) {
         if (axios.isCancel(error)) return;
+        dispatch({
+          type: "SET_UPDATE_PROFILE",
+          payload: false,
+        });
       }
     }
   }
@@ -986,12 +1018,26 @@ export const GlobalProvider = ({ children }) => {
   }
 
   async function getLeaveDetails() {
-    const leave_details = Cookies.get("__leave_details");
+    let leave_details = Cookies.get("__leave_details");
+    let cachedLeave = null;
+
+    if (leave_details) {
+      try {
+        cachedLeave = decryptData(leave_details);
+      } catch (e) {
+        cachedLeave = null;
+      }
+      // A corrupt cookie or a cached null: drop it and fetch again.
+      if (!cachedLeave || typeof cachedLeave !== "object") {
+        Cookies.remove("__leave_details");
+        leave_details = null;
+      }
+    }
 
     if (leave_details) {
       dispatch({
         type: "GET_LEAVE_INFO",
-        payload: decryptData(leave_details),
+        payload: cachedLeave,
       });
     } else {
       loadingStatus(!state.isLoading ? true : false);
@@ -1010,7 +1056,9 @@ export const GlobalProvider = ({ children }) => {
           config
         );
         if (!res.data.error) {
-          addCookie(encryptData(res.data.data), "__leave_details");
+          if (res.data.data && typeof res.data.data === "object") {
+            addCookie(encryptData(res.data.data), "__leave_details");
+          }
           dispatch({
             type: "GET_LEAVE_INFO",
             payload: res.data.data,
@@ -1378,14 +1426,18 @@ export const GlobalProvider = ({ children }) => {
   }
 
   async function getAllDependents() {
+    // User info isn't buffered until userDetailsToUpdate() finishes -- it calls
+    // this again once it is, so skip quietly instead of throwing.
+    if (!localStorage._buffer_user_info) return;
+
     dispatch({
       type: "SET_UPDATE_PROFILE",
       payload: true,
     });
 
-    const user_info = JSON.parse(localStorage._buffer_user_info);
-
     try {
+      const user_info = JSON.parse(localStorage._buffer_user_info);
+
       const config = {
         headers: {
           "Content-Type": "application/json",
@@ -1400,7 +1452,7 @@ export const GlobalProvider = ({ children }) => {
 
       dispatch({
         type: "GET_DEPENDENTS",
-        payload: res.data.data,
+        payload: Array.isArray(res.data.data) ? res.data.data : [],
       });
 
       dispatch({
@@ -1409,18 +1461,26 @@ export const GlobalProvider = ({ children }) => {
       });
     } catch (error) {
       if (axios.isCancel(error)) return;
+      dispatch({
+        type: "SET_UPDATE_PROFILE",
+        payload: false,
+      });
     }
   }
 
   async function getAllNextOfKin() {
+    // User info isn't buffered until userDetailsToUpdate() finishes -- it calls
+    // this again once it is, so skip quietly instead of throwing.
+    if (!localStorage._buffer_user_info) return;
+
     dispatch({
       type: "SET_UPDATE_PROFILE",
       payload: true,
     });
 
-    const user_info = JSON.parse(localStorage._buffer_user_info);
-
     try {
+      const user_info = JSON.parse(localStorage._buffer_user_info);
+
       const config = {
         headers: {
           "Content-Type": "application/json",
@@ -1435,7 +1495,7 @@ export const GlobalProvider = ({ children }) => {
 
       dispatch({
         type: "GET_NEXT_OF_KIN",
-        payload: res.data.data,
+        payload: Array.isArray(res.data.data) ? res.data.data : [],
       });
 
       dispatch({
@@ -1444,6 +1504,10 @@ export const GlobalProvider = ({ children }) => {
       });
     } catch (error) {
       if (axios.isCancel(error)) return;
+      dispatch({
+        type: "SET_UPDATE_PROFILE",
+        payload: false,
+      });
     }
 
     // const kin_details = Cookies.get("__kin_details");
