@@ -1,7 +1,21 @@
-import React from "react";
-import banner from "../../images/banners/xmasbanner2.jpg";
+import React, { useContext } from "react";
+import { GlobalContext } from "../../context/GlobalState";
+
+const MIC_BANNER = `${process.env.PUBLIC_URL}/media/${encodeURIComponent("Christmas MIC banner.webp")}`;
+const EHS_BANNER = `${process.env.PUBLIC_URL}/media/${encodeURIComponent("Christmas EHS banner.webp")}`;
 
 const ChristmasBanner = ({ voucher }) => {
+  const { user_info = {} } = useContext(GlobalContext);
+  const companyEmail = String(user_info.CompanyEmail || "").toLowerCase();
+  const branch = String(user_info.Branch || "").toLowerCase();
+  const department = String(user_info.Dept || user_info.Department || "").toLowerCase();
+  const isEhs =
+    companyEmail.includes("ehs") ||
+    branch.includes("healthcare") ||
+    branch.includes("executive") ||
+    department.includes("ehs");
+  const banner = isEhs ? EHS_BANNER : MIC_BANNER;
+
   // Handle loading/empty state: render nothing
   if (!voucher || (Array.isArray(voucher) && voucher.length === 0)) return null;
 

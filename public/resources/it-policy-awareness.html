@@ -342,7 +342,11 @@ const DataAdapter = {
           })
         });
         const json = await res.json();
-        if(res.ok && json.status === "success") return { ok: true };
+        if(res.ok && json.status === "success"){
+          // Keep NAV's latest result (score %, chapters, time taken, date) for the results screen
+          if(json.data && typeof json.data === "object") state.navResult = json.data;
+          return { ok: true };
+        }
         // A validation / NAV business rejection (4xx) won't improve on retry
         if(res.status < 500) return { ok: false, message: json.message };
       }catch(e){
@@ -900,6 +904,7 @@ async function startAttemptAndGoToQuiz(triggerBtn, errEl){
   triggerBtn.disabled = true;
   triggerBtn.textContent = "Starting…";
   if(errEl) errEl.style.display = "none";
+  state.navResult = null;
   try{
     if(!state.attemptNo || state.attemptUsed){
       const fresh = await fetchITQuestions(state.employeeId, state.entity);
@@ -1120,13 +1125,22 @@ async function finishQuiz(){
     });
     const navTotal = Number(result.totalQuestions);
     const navScore = Number(result.correctAnswers);
+    // NAV's submit response: { scorepercentage, timeTaken, chapters, name, empID, entity, department, date }
+    const nav = (result && result.data && typeof result.data === "object") ? result.data : (state.navResult || result || {});
     state.lastRecord = Object.assign({}, base, {
       attemptNo: result.attemptNo || state.attemptNo,
       score: navTotal > 0 ? navScore : localCorrect,
       total: navTotal > 0 ? navTotal : localTotal,
       passed: result.passed,
-      completedDate: result.completedDate || new Date().toISOString()
+      completedDate: nav.date || result.completedDate || new Date().toISOString(),
+      navScorePercentage: nav.scorepercentage,
+      navTimeTaken: nav.timeTaken,
+      navChapters: nav.chapters
     });
+    if(nav.name) state.lastRecord.name = nav.name;
+    if(nav.empID) state.lastRecord.employeeId = nav.empID;
+    if(nav.entity) state.lastRecord.entity = nav.entity;
+    if(nav.department) state.lastRecord.department = String(nav.department).trim();
   }catch(e){
     // Surface submission failures plainly instead of fabricating a result.
     state.saveError = friendlyError(e, "Could not submit your completion to NAV. Please notify IT and try again.");
@@ -1226,6 +1240,20 @@ function formatDuration(totalSeconds){
   return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
 }
 
+// NAV returns a .NET TimeSpan string, e.g. "20.20:08:48.2490000" (d.hh:mm:ss.fffffff).
+// Display it as-is in readable units; falls back to the raw string if it doesn't match.
+function formatNavTimeSpan(value){
+  const m = String(value).trim().match(/^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})(?:\.\d+)?$/);
+  if(!m) return String(value);
+  const d = Number(m[1] || 0), h = Number(m[2]), min = Number(m[3]), s = Number(m[4]);
+  const parts = [];
+  if(d) parts.push(`${d}d`);
+  if(d || h) parts.push(`${h}h`);
+  if(d || h || min) parts.push(`${min}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
+}
+
 function renderThankYou(){
   const r = state.lastRecord || {};
   const firstName = r.name ? String(r.name).trim().split(/\s+/)[0] : "";
@@ -1246,10 +1274,10 @@ function renderThankYou(){
         <h2 class="ty-h2">Thank you${firstName ? `, ${escapeHtml(firstName)}` : ""}!</h2>
         <p class="ty-p">Your responses have been successfully submitted to NAV and your completion has been recorded. Your results are held in strict confidence.</p>
         <div class="ty-stats">
-          <div class="ty-stat"><span class="k">Chapters reviewed</span><span class="v">${chaptersViewed}/${chaptersTotal}</span></div>
-          <div class="ty-stat"><span class="k">Quiz score</span><span class="v">${total > 0 ? `${score}/${total} <small>(${pct}%)</small>` : "—"}</span></div>
+          <div class="ty-stat"><span class="k">Chapters reviewed</span><span class="v">${r.navChapters != null && r.navChapters !== "" ? escapeHtml(String(r.navChapters)) : `${chaptersViewed}/${chaptersTotal}`}</span></div>
+          <div class="ty-stat"><span class="k">Quiz score</span><span class="v">${r.navScorePercentage != null && r.navScorePercentage !== "" ? `${escapeHtml(String(r.navScorePercentage))}%` : (total > 0 ? `${score}/${total} <small>(${pct}%)</small>` : "—")}</span></div>
           <div class="ty-stat"><span class="k">Attempt No</span><span class="v">${escapeHtml(String(attemptNo))}</span></div>
-          <div class="ty-stat"><span class="k">Time taken</span><span class="v">${escapeHtml(timeTaken)}</span></div>
+          <div class="ty-stat"><span class="k">Time taken</span><span class="v">${escapeHtml(r.navTimeTaken ? formatNavTimeSpan(r.navTimeTaken) : timeTaken)}</span></div>
         </div>
         <div class="ty-date" id="svDate">Submitted ${escapeHtml(submitted)}</div>
         <div class="ty-actions">
