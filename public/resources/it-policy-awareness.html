@@ -166,6 +166,13 @@
   .ty-stat .k{display:block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:4px;}
   .ty-stat .v{font-size:19px;font-weight:800;color:#fff;line-height:1.2;}
   .ty-stat .v small{font-size:12px;font-weight:600;color:rgba(255,255,255,.75);}
+  .ty-stat-wide{grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .ty-stat-wide .k{margin-bottom:0;}
+  .ty-result{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:rgba(255,255,255,.16);color:#fff;}
+  .ty-result.pass{background:#1f9d55;color:#fff;}
+  .ty-result.pass::before{content:"\2713";}
+  .ty-result.fail{background:#d64545;color:#fff;}
+  .ty-result.fail::before{content:"\2715";}
   .ty-date{font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.3);align-self:flex-start;}
   .ty-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;}
   .ty-btn{display:inline-flex;align-items:center;justify-content:center;padding:13px 22px;border-radius:999px;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:background .15s,border-color .15s,color .15s,transform .15s;}
@@ -1144,7 +1151,8 @@ async function finishQuiz(){
       completedDate: nav.date || result.completedDate || new Date().toISOString(),
       navScorePercentage: nav.scorepercentage,
       navTimeTaken: nav.timeTaken,
-      navChapters: nav.chapters
+      navChapters: nav.chapters,
+      navScoreStatus: nav.scoreStatus
     });
     if(nav.name) state.lastRecord.name = nav.name;
     if(nav.empID) state.lastRecord.employeeId = nav.empID;
@@ -1313,6 +1321,12 @@ function renderThankYou(){
           <div class="ty-stat"><span class="k">Quiz score</span><span class="v">${r.navScorePercentage != null && r.navScorePercentage !== "" ? `${escapeHtml(String(r.navScorePercentage))}%` : (total > 0 ? `${score}/${total} <small>(${pct}%)</small>` : "—")}</span></div>
           <div class="ty-stat"><span class="k">Attempt No</span><span class="v">${escapeHtml(String(attemptNo))}</span></div>
           <div class="ty-stat"><span class="k">Time taken</span><span class="v">${escapeHtml(r.navTimeTaken ? formatNavTimeSpan(r.navTimeTaken) : timeTaken)}</span></div>
+          ${r.navScoreStatus ? (() => {
+            // NAV's scoreStatus ("Passed" / "Failed"), shown exactly as NAV sends it
+            const status = String(r.navScoreStatus).trim();
+            const cls = /^pass/i.test(status) ? "pass" : (/^fail/i.test(status) ? "fail" : "");
+            return `<div class="ty-stat ty-stat-wide"><span class="k">Result</span><span class="v"><span class="ty-result ${cls}">${escapeHtml(status)}</span></span></div>`;
+          })() : ""}
         </div>
         <div class="ty-date" id="svDate">Submitted ${escapeHtml(submitted)}</div>
         <div class="ty-actions">
