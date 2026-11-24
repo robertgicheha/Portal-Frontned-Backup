@@ -85,6 +85,17 @@ export const GlobalProvider = ({ children }) => {
       try {
         return jwt.decode(token, jwtSecret);
       } catch (e) {
+        // A freshly issued token has nbf = the server's "now". If this PC's
+        // clock is even a second behind the server, jwt-simple rejects it as
+        // "not yet active" and the session was wiped straight after login.
+        // The server still validates every API call, so accept it here.
+        if (e && e.message === "Token not yet active") {
+          try {
+            return jwt.decode(token, jwtSecret, true);
+          } catch (e2) {
+            // fall through to clearing the session below
+          }
+        }
         // Corrupted, mismatched-secret, or otherwise undecodable token --
         // treat it the same as "not logged in" instead of crashing, and
         // clear it so it doesn't keep failing on every future call.
