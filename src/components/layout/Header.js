@@ -142,7 +142,16 @@ const Header = () => {
                   <div className="arrow-up"></div>
                   <ul>
                     <li>
-                      {employeeName}
+                      {(() => {
+                        const info = user_info || {};
+                        const first = info.FirstName || info.firstName || "";
+                        const last = info.LastName || info.lastName || "";
+                        if (first || last) return `${first} ${last}`.trim();
+                        const parts = String(employeeName).trim().split(/\s+/);
+                        return parts.length > 1
+                          ? `${parts[0]} ${parts[parts.length - 1]}`
+                          : parts[0];
+                      })()}
                     </li>
                     <li>
                       <Link to="/profile">
