@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import "popper.js";
 import "bootstrap/dist/css/bootstrap.css";
 import "./css/mobile.scss";
+import "./css/responsive.css";
 import "react-loader-spinner/dist/loader/css/react-spinner-loader.css";
 import "react-tabs/style/react-tabs.css";
 import "react-datepicker/dist/react-datepicker.css";
